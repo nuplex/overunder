@@ -121,7 +121,7 @@ function App() {
   const [days, setDays] = useState([]);
   const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
   const [triedLoad, setTriedLoad] = useState(false);
-  const [trySave, setTrySave] = useState(true);
+  const [trySave, setTrySave] = useState(false);
 
   const loadFromBrowser = () => {
     const expensesJson = document.cookie
@@ -134,9 +134,8 @@ function App() {
     .find((row) => row.startsWith("settings="))
     ?.split("=")[1];
 
-    const newExpenses = JSON.parse(expensesJson as string);
-
-    if (newExpenses) {
+    if (expensesJson) {
+      const newExpenses = JSON.parse(expensesJson as string);
       let newSpend = 0;
       newExpenses.forEach((e: Expense) => newSpend += e.amount);
 
