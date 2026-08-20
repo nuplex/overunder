@@ -13,6 +13,7 @@ type Expense = {
   description?: string;
 }
 
+// @ts-ignore
 type Day = {
   expenses: Expense[];
   limit: number;
@@ -116,6 +117,7 @@ function App() {
   const [spent, setSpent] = useState(0);
   const [expense, setExpense] = useState(0);
   const [expenses, setExpenses] = useState<Expense[]>([]);
+  // @ts-ignore
   const [days, setDays] = useState([]);
   const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
   const [triedLoad, setTriedLoad] = useState(false);
