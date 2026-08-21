@@ -167,48 +167,63 @@ const NewExpense = ({
 };
 
 const Description = ({
-  initialShow,
+  initialShowText,
   description,
   onAddDescription
 }:{
-  initialShow: boolean;
+  initialShowText: boolean;
   description?: string;
   onAddDescription: ({}: any) => void;
 }) => {
   const [text, setText] = useState(description);
-  const [show, setShow] = useState(initialShow);
+  const [showText, setShowText] = useState(initialShowText);
+  const [editing, setEditing] = useState(false);
 
   const textStyle: Partial<CSSProperties> = {
     fontSize: "12px"
   };
 
-  if (description) {
+  const onClickText = () => {
+    setShowText(false);
+    setEditing(true);
+  }
+
+  if (text && showText && !editing) {
     return (
-      <div style={textStyle}>
+      <div style={textStyle} onClick={onClickText} >
         {description}
       </div>
     )
   }
+  
+  const onClickEdit = () => {
+    setShowText(true);
+    setEditing(true);
+  }
 
-  if (!show && !text) {
+  if (((!showText || !text) || (showText && !text)) && !editing) {
     return (
       <div>
-        <button onClick={() => setShow(true)}>+Desc</button>
+        <button onClick={onClickEdit}>+Desc</button>
       </div>
     )
   }
 
   const onAdd = () => {
-    if (text != '') {
-      onAddDescription(text);
-    }
+    onAddDescription(text);
+    setEditing(false);
+  }
+
+  const onCloseEdit = () => {
+    setShowText(true);
+    setEditing(false);
   }
 
   return (
     <div>
-      <input type="text" maxLength={28} value={text} placeholder={"describe this..."} onChange={(e) => setText(e.target.value)}/>
+      <input type="text" maxLength={28} value={text} placeholder={"describe this..."} onChange={(e) => setText(e.target?.value ?? '')}/>
       <button onClick={onAdd}>+</button>
-      <button onClick={() =>  setShow(false)}>x</button>
+      <button onClick={onCloseEdit}>x</button>
     </div>
   )
 }
@@ -364,7 +379,7 @@ function App() {
       marginTop: "4px",
     };
     const onAddDescription = (text: string) => {
-      if (text !== '') {
+      if (text !== undefined) {
         exp.description = text;
         setDesc(text);
         setTrySave(true);
@@ -375,7 +390,7 @@ function App() {
       <div style={contStyle}>
         <span style={currencyStyle}>{exp.currency}</span><span>{exp.amount}</span>
         <p style={timeStyle}>{formatTimestamp(exp.timestamp)}</p>
-        <Description initialShow={false} description={desc} onAddDescription={onAddDescription}/>
+        <Description initialShowText={!!desc} description={desc} onAddDescription={onAddDescription}/>
         <button onClick={() => onDeleteExpense(exp.timestamp)}>Delete</button>
       </div>
     )
