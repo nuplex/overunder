@@ -123,9 +123,98 @@ function Settings({
   )
 }
 
+const NewExpense = ({
+  onAddExpense,
+  settings
+}:{
+  onAddExpense: ({}: any) => void;
+  settings: Settings;
+}) => {
+  const [expense, setExpense] = useState(0);
+
+  const inputStyle: Partial<CSSProperties> = {
+    border: "none",
+    borderBottom: "2px solid #333",
+    fontSize: "36px",
+    lineHeight: "36px",
+    width: "150px",
+  };
+
+  const buttonStyle: Partial<CSSProperties> = {
+    height: "50px",
+    width: "50px",
+    fontWeight: "bolder",
+    padding: "4px",
+    marginLeft: "8px",
+    fontSize: "36px"
+  };
+
+  const onAddExpenseLocal = () => {
+    if(Number.isNaN(expense) || expense === 0) {
+      return;
+    }
+    onAddExpense(expense);
+    setExpense(0);
+  }
+
+  return (
+    <div>
+      <span>{settings.currency}</span>
+      <input key="newEpenseInput" style={inputStyle} type="number" placeholder={`What's new?`} value={expense} onChange={(e: any) => setExpense(parseInt(e.target.value))}/>
+      <button style={buttonStyle} onClick={onAddExpenseLocal}>+</button>
+    </div>
+  );
+};
+
+const Description = ({
+  initialShow,
+  description,
+  onAddDescription
+}:{
+  initialShow: boolean;
+  description?: string;
+  onAddDescription: ({}: any) => void;
+}) => {
+  const [text, setText] = useState(description);
+  const [show, setShow] = useState(initialShow);
+
+  const textStyle: Partial<CSSProperties> = {
+    fontSize: "12px"
+  };
+
+  if (description) {
+    return (
+      <div style={textStyle}>
+        {description}
+      </div>
+    )
+  }
+
+  if (!show && !text) {
+    return (
+      <div>
+        <button onClick={() => setShow(true)}>+Desc</button>
+      </div>
+    )
+  }
+
+  const onAdd = () => {
+    if (text != '') {
+      onAddDescription(text);
+    }
+  }
+
+  return (
+    <div>
+      <input type="text" maxLength={28} value={text} placeholder={"describe this..."} onChange={(e) => setText(e.target.value)}/>
+      <button onClick={onAdd}>+</button>
+      <button onClick={() =>  setShow(false)}>x</button>
+    </div>
+  )
+}
+
 function App() {
   const [spent, setSpent] = useState(0);
-  const [expense, setExpense] = useState(0);
   const [expenses, setExpenses] = useState<Expense[]>([]);
   // @ts-ignore
   const [days, setDays] = useState([]);
@@ -151,7 +240,6 @@ function App() {
 
       setExpenses(newExpenses);
       setSpent(newSpend);
-      setExpense(0);
     }
 
     if (settingsJson) {
@@ -181,14 +269,14 @@ function App() {
     setTrySave(true);
   }
 
-  const onAddExpense = () => {
-    if (expense === 0) {
+  const onAddExpense = (value: number) => {
+    if (value === 0) {
       return;
     }
 
     const newExpense: Expense = {
       currency: settings.currency,
-      amount: expense,
+      amount: value,
       timestamp: Date.now(),
     }
 
@@ -199,7 +287,6 @@ function App() {
 
     setExpenses(newExpenses);
     setSpent(newSpend);
-    setExpense(0);
     setTrySave(true);
   }
 
@@ -211,7 +298,6 @@ function App() {
 
     setExpenses(newExpenses);
     setSpent(newSpend);
-    setExpense(0);
     setTrySave(true);
   }
 
@@ -262,45 +348,37 @@ function App() {
   }
 
   const ViewExpense = ({exp}: {exp: Expense}) => {
+    const [desc, setDesc] = useState(exp.description);
+
     const contStyle: Partial<CSSProperties> = {
-      marginBlock: "6px",
+      marginBlock: "10px",
+    };
+
+    const currencyStyle: Partial<CSSProperties> = {
+      fontSize: "12px",
+    };
+
+    const timeStyle: Partial<CSSProperties> = {
+      fontSize: "12px",
+      lineHeight: "12px",
+      marginTop: "4px",
+    };
+    const onAddDescription = (text: string) => {
+      if (text !== '') {
+        exp.description = text;
+        setDesc(text);
+        setTrySave(true);
+      }
     }
 
     return (
       <div style={contStyle}>
-        <span>{exp.currency}</span><span>{exp.amount}</span>
-        <p>{formatTimestamp(exp.timestamp)}</p>
-        {/*TODO add description*/}
+        <span style={currencyStyle}>{exp.currency}</span><span>{exp.amount}</span>
+        <p style={timeStyle}>{formatTimestamp(exp.timestamp)}</p>
+        <Description initialShow={false} description={desc} onAddDescription={onAddDescription}/>
         <button onClick={() => onDeleteExpense(exp.timestamp)}>Delete</button>
       </div>
     )
-  };
-
-  const NewExpense = () => {
-    const inputStyle: Partial<CSSProperties> = {
-      border: "none",
-      borderBottom: "2px solid #333",
-      fontSize: "36px",
-      lineHeight: "36px",
-      width: "150px",
-    };
-
-    const buttonStyle: Partial<CSSProperties> = {
-      height: "50px",
-      width: "50px",
-      fontWeight: "bolder",
-      padding: "4px",
-      marginLeft: "8px",
-      fontSize: "36px"
-    };
-
-    return (
-      <div>
-        <span>{settings.currency}</span>
-        <input style={inputStyle} type="number" placeholder={`What's new?`} value={expense} onChange={(e: any) => setExpense(parseInt(e.target.value))}/>
-        <button style={buttonStyle} onClick={onAddExpense}>+</button>
-      </div>
-    );
   };
 
   const DataButtons = () => {
@@ -318,7 +396,7 @@ function App() {
   return (
     <div>
       <OverUnder/>
-      <NewExpense/>
+      <NewExpense onAddExpense={onAddExpense} settings={settings}/>
       {expenses.map((e, i) => <ViewExpense key={`${e.timestamp}${i}`} exp={e}/>)}
       <Settings initial={settings} onChangeSettings={onChangeSettings}/>
       <DataButtons/>
