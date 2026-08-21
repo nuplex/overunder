@@ -46,9 +46,15 @@ function formatTimestamp(timestamp: number) {
 }
 
 
-function Settings({onChangeSettings}: {onChangeSettings: ({}: any) => void}) {
-  const [currCurrency, setCurrCurrency] = useState<Currency>(DEFAULT_SETTINGS.currency);
-  const [limits, setLimits] = useState<LimitsSettings>(DEFAULT_SETTINGS.limits);
+function Settings({
+  initial,
+  onChangeSettings
+}: {
+  initial?: Settings
+  onChangeSettings: ({}: any) => void
+}) {
+  const [currCurrency, setCurrCurrency] = useState<Currency>(initial?.currency ?? DEFAULT_SETTINGS.currency);
+  const [limits, setLimits] = useState<LimitsSettings>(initial?.limits ?? DEFAULT_SETTINGS.limits);
 
   const onChangeLimitSettings = (currency: Currency, amount: number) => {
     const newLimits = {...limits, [currency]: amount};
@@ -105,8 +111,12 @@ function Settings({onChangeSettings}: {onChangeSettings: ({}: any) => void}) {
     );
   };
 
+  const contStyle: Partial<CSSProperties> = {
+    marginBlock: "12px"
+  };
+
   return (
-    <div>
+    <div style={contStyle}>
       {CURRENCIES.map((c, i) => <CurrencyBadge key={`cb${i}`} currency={c}/>)}
       {CURRENCIES.map((c, i) => <LimitInput key={`cl${i}`} currency={c}/>)}
     </div>
@@ -150,10 +160,8 @@ function App() {
   };
 
   const saveToBrowser = () => {
-    if (expenses.length > 0) {
-      const expensesString = JSON.stringify(expenses);
-      document.cookie = `expenses=${expensesString}; max-age=31536000`;
-    }
+    const expensesString = JSON.stringify(expenses);
+    document.cookie = `expenses=${expensesString}; max-age=31536000`;
     const settingsString = JSON.stringify(settings);
     document.cookie = `settings=${settingsString}; max-age=31536000`;
   }
@@ -312,7 +320,7 @@ function App() {
       <OverUnder/>
       <NewExpense/>
       {expenses.map((e, i) => <ViewExpense key={`${e.timestamp}${i}`} exp={e}/>)}
-      <Settings onChangeSettings={onChangeSettings}/>
+      <Settings initial={settings} onChangeSettings={onChangeSettings}/>
       <DataButtons/>
     </div>
   )
