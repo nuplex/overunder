@@ -366,6 +366,7 @@ function App() {
       setSpent(newSpend);
     }
 
+    let loaded;
     if (periodsJson) {
       const loadedPeriods: SpendPeriod[] = JSON.parse(periodsJson);
       const currentPeriod: SpendPeriod = loadedPeriods[0];
@@ -375,8 +376,7 @@ function App() {
       setCurrentPeriod(currentPeriod);
       setPeriods(loadedPeriods);
       setSpent(currentPeriod.total);
-
-      return loadedPeriods;
+      loaded = loadedPeriods;
     }
 
     if (settingsJson) {
@@ -404,6 +404,8 @@ function App() {
         return [newPeriod];
       }
     }
+
+    if (loaded) return loaded;
   };
 
   const saveToBrowser = () => {
@@ -514,10 +516,19 @@ function App() {
       total: 0,
     };
 
-    setPeriods([newPeriod, ...periods]);
-    setCurrentPeriodIndex(0);
-    setCurrentPeriod(newPeriod);
-    setTrySave(true);
+    if (currentPeriod.expenses.length === 0) {
+      // allows reset if there's a bug loading it; plus prevents empty periods
+      const inPlacePeriods = [...periods];
+      periods[0] = newPeriod;
+      setPeriods(inPlacePeriods);
+      setCurrentPeriod(newPeriod);
+      setTrySave(true);
+    } else {
+      setPeriods([newPeriod, ...periods]);
+      setCurrentPeriodIndex(0);
+      setCurrentPeriod(newPeriod);
+      setTrySave(true);
+    }
   }
 
   const previous = () => {
@@ -583,15 +594,17 @@ function App() {
 
     const spentText = currentPeriodIndex === 0 ? 'spent so far' : 'spent';
 
+    const currencyDisplay = currentPeriodIndex === 0 ? settings.currency : currentPeriod.currency;
+
     return (
       <div style={contStyle}>
         <h5 style={spentStyle}>{spentText}</h5>
         <div>
-          <span>{settings.currency}</span><span style={spentNumberStyle}>{spent}</span>
+          <span>{currencyDisplay}</span><span style={spentNumberStyle}>{spent}</span>
         </div>
         <h6 style={overunderStyle}>{overunderText}</h6>
         <div>
-          <span>{settings.currency}</span><span style={limitNumberStyle}>{limit}</span>
+          <span>{currencyDisplay}</span><span style={limitNumberStyle}>{limit}</span>
         </div>
       </div>
     )
@@ -631,7 +644,7 @@ function App() {
     marginInline: "8px",
   };
 
-  const displaySettings = currentPeriodIndex == 0;
+  const onActivePeriod = currentPeriodIndex == 0;
 
   const containerStyle: Partial<CSSProperties> = {
     marginBottom: "100px",
@@ -650,7 +663,7 @@ function App() {
         </div>
         <SpendPeriod period={currentPeriod} onTrySave={onTrySave} onDeleteExpense={onDeleteExpense} allowDelete={currentPeriodIndex === 0}/>
       </div>
-      {displaySettings ? <Settings initial={settings} onChangeSettings={onChangeSettings}/> : null}
+      {onActivePeriod ? <Settings initial={settings} onChangeSettings={onChangeSettings}/> : null}
       <DataButtons/>
     </div>
   )
