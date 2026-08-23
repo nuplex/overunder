@@ -4,7 +4,7 @@ import moment from "moment";
 
 const WARN_THRESHOLD = 0.80;
 
-const CURRENCIES = ['USD', 'HKD', 'SGD', 'NTD', 'JPY'] as const;
+const CURRENCIES = ['USD', 'HKD', 'SGD', 'NTD', 'JPY', 'THB'] as const;
 type Currency = typeof CURRENCIES[number];
 
 type Expense = {
@@ -40,6 +40,7 @@ const DEFAULT_SETTINGS: Settings = {
     SGD: 20,
     NTD: 600,
     HKD: 160,
+    THB: 600,
   }
 };
 
@@ -336,8 +337,7 @@ const BOILERPLATE_PERIOD: SpendPeriod = {
 
 function App() {
   const [spent, setSpent] = useState(0);
-  // @ts-ignore
-  const [periods, setPeriods] = useState<Period[]>([]);
+  const [periods, setPeriods] = useState<SpendPeriod[]>([]);
   const [currentPeriod, setCurrentPeriod] = useState<SpendPeriod>(BOILERPLATE_PERIOD);
   const [currentPeriodIndex, setCurrentPeriodIndex] = useState(0);
   const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
@@ -351,24 +351,32 @@ function App() {
     .find((row) => row.startsWith("expenses="))
     ?.split("=")[1];
 
-    const periodsJson = document.cookie
-    .split("; ")
-    .find((row) => row.startsWith("periods="))
-    ?.split("=")[1];
+    let periodsJson = localStorage.getItem('periods') ?? undefined;
+    let settingsJson = localStorage.getItem('settings') ?? undefined;
 
-    const settingsJson = document.cookie
-    .split("; ")
-    .find((row) => row.startsWith("settings="))
-    ?.split("=")[1];
+    // TODO remove cookie retrieval once initial data is gotten from localStorage
+    if (!periodsJson) {
+      periodsJson = document.cookie
+      .split("; ")
+      .find((row) => row.startsWith("periods="))
+      ?.split("=")[1];
+    }
+
+    // TODO remove cookie retrieval once initial data is gotten from localStorage
+    if (!settingsJson) {
+      settingsJson = document.cookie
+      .split("; ")
+      .find((row) => row.startsWith("settings="))
+      ?.split("=")[1];
+    }
 
 
-    // TODO replace with loading periods
-    if (expensesJson) {
+    // TODO remove expensesJson once initial data is put into periods format
+    if (expensesJson && !periodsJson) {
       const loadedExpenses = JSON.parse(expensesJson);
       let newSpend = 0;
       loadedExpenses.forEach((e: Expense) => newSpend += e.amount);
 
-      //setExpenses(loadedExpenses);
       setSpent(newSpend);
     }
 
@@ -377,7 +385,6 @@ function App() {
       const loadedPeriods: SpendPeriod[] = JSON.parse(periodsJson);
       const currentPeriod: SpendPeriod = loadedPeriods[0];
 
-      //setExpenses(loadedExpenses);
       setCurrentPeriodIndex(0);
       setCurrentPeriod(currentPeriod);
       setPeriods(loadedPeriods);
@@ -415,10 +422,15 @@ function App() {
   };
 
   const saveToBrowser = () => {
+    // TODO remove cookie storage
     const periodsString = JSON.stringify(periods);
     document.cookie = `periods=${periodsString}; max-age=31536000`;
     const settingsString = JSON.stringify(settings);
     document.cookie = `settings=${settingsString}; max-age=31536000`;
+
+    // TODO need to check if periods is full and retrieve from second item
+    localStorage.setItem('periods', JSON.stringify(periods));
+    localStorage.setItem('settings', JSON.stringify(settings));
   }
 
   if (!triedLoad) {
@@ -597,7 +609,7 @@ function App() {
     overunderText = spent >= (limit * WARN_THRESHOLD) && spent < limit ? 'stay under!' : overunderText;
     overunderText = spent === limit ? 'at' : overunderText;
     if (currentPeriodIndex > 0) {
-      overunderText = spent > limit ? ' was over' : 'stayed under';
+      overunderText = spent > limit ? ' went over' : 'stayed under';
       overunderText = spent >= (limit * WARN_THRESHOLD) && spent < limit ? 'got close to' : overunderText;
       overunderText = spent === limit ? 'was at' : overunderText;
     }
@@ -673,10 +685,14 @@ function App() {
     setTrySave(true);
   }
 
-  const format = "D-M-YYYY HH:mm";
+  const format = "ddd D MMM, YYYY HH:mm";
   const start = moment(currentPeriod.start).format(format);
   const end = currentPeriod.end ? moment(currentPeriod.end).format(format) : 'now';
-  const periodText = `${start} to ${end}`;
+  let periodText = `${start} to ${end}`;
+
+  if (moment(currentPeriod.start).isSame(moment(currentPeriod.end, 'day'))) {
+    periodText = `${start} to ${moment(currentPeriod.end).format("HH:mm")}`;
+  }
 
   const periodTextStyle: Partial<CSSProperties> = {
     display: "inline-block",
