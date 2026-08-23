@@ -22,6 +22,7 @@ type SpendPeriod = {
   total: number;
   start: number;
   end?: number;
+  name?: string;
 }
 
 type LimitsSettings = Record<Currency, number>;
@@ -94,6 +95,8 @@ function Settings({
   };
 
   const LimitInput = ({currency}:{currency: Currency}) => {
+    const [val, setVal] = useState(limits[currency]);
+
     const inputStyle: Partial<CSSProperties> = {
       fontSize: '18px',
       height: '24px',
@@ -108,8 +111,9 @@ function Settings({
       <div style={divStyle}>
         <label>
           {currency} Limit:&nbsp;
-          <input style={inputStyle} type="number" value={limits[currency]}
-                 onChange={(e) => onChangeLimitSettings(currency, parseInt(e.target.value))}/>
+          <input style={inputStyle} type="number" value={val}
+                 onBlur={() => onChangeLimitSettings(currency, val)}
+                 onChange={(e) => setVal(parseInt(e.target.value))}/>
         </label>
       </div>
     );
@@ -178,11 +182,13 @@ const NewExpense = ({
 const Description = ({
   initialShowText,
   description,
-  onAddDescription
+  onAddDescription,
+  label = '+Desc',
 }:{
   initialShowText: boolean;
   description?: string;
   onAddDescription: ({}: any) => void;
+  label?: string;
 }) => {
   const [text, setText] = useState(description);
   const [showText, setShowText] = useState(initialShowText);
@@ -213,7 +219,7 @@ const Description = ({
   if (((!showText || !text) || (showText && !text)) && !editing) {
     return (
       <div>
-        <button onClick={onClickEdit}>+Desc</button>
+        <button onClick={onClickEdit}>{label}</button>
       </div>
     )
   }
@@ -506,7 +512,10 @@ function App() {
   }
 
   const onEndPeriod = () => {
-    currentPeriod.end = Date.now();
+    // Not the current period that is being display, which is what it normally means.
+    const actualCurrentPeriod = periods[0];
+
+    actualCurrentPeriod.end = Date.now();
 
     const newPeriod: SpendPeriod = {
       expenses: [],
@@ -516,17 +525,18 @@ function App() {
       total: 0,
     };
 
-    if (currentPeriod.expenses.length === 0) {
+    if (actualCurrentPeriod.expenses.length === 0) {
       // allows reset if there's a bug loading it; plus prevents empty periods
       const inPlacePeriods = [...periods];
-      periods[0] = newPeriod;
+      inPlacePeriods[0] = newPeriod;
       setPeriods(inPlacePeriods);
       setCurrentPeriod(newPeriod);
+      setCurrentPeriodIndex(0);
       setTrySave(true);
     } else {
       setPeriods([newPeriod, ...periods]);
-      setCurrentPeriodIndex(0);
       setCurrentPeriod(newPeriod);
+      setCurrentPeriodIndex(0);
       setTrySave(true);
     }
   }
@@ -627,11 +637,41 @@ function App() {
     marginBottom: "8px"
   }
 
-  const NewPeriodButton = () => (
-    <div style={newPeriodStyle}>
-      <button onClick={onEndPeriod}>Start New Spend Period</button>
-    </div>
-  );
+  const NewPeriodButton = () => {
+    const [showAreYouSure, setShowAreYouSure] = useState(false);
+
+    const onInitialClick = () => setShowAreYouSure(true);
+
+    const textStyle: Partial<CSSProperties> = {
+      fontSize: "14px"
+    };
+
+    // TODO this can just be made into a generic component
+    const AreYouSure = () => (
+      <div>
+        <span style={textStyle}>Are you sure?</span>&nbsp;
+        <button onClick={onEndPeriod}>Yes</button>&nbsp;
+        <button onClick={() => setShowAreYouSure(false)}>No</button>
+      </div>
+    );
+
+    return (
+      <div style={newPeriodStyle}>
+        {!showAreYouSure ? <button onClick={onInitialClick}>Start New Spend Period</button> : null}
+        {showAreYouSure ? <AreYouSure/> : null}
+      </div>
+    );
+  };
+
+  const onAddPeriodName = (name: string) => {
+    currentPeriod.name = name;
+    const newPeriod = {...currentPeriod, name};
+    const newPeriods = [...periods];
+    newPeriods[currentPeriodIndex] = newPeriod;
+    setCurrentPeriod(newPeriod);
+    setPeriods(newPeriods);
+    setTrySave(true);
+  }
 
   const format = "D-M-YYYY HH:mm";
   const start = moment(currentPeriod.start).format(format);
@@ -644,6 +684,18 @@ function App() {
     marginInline: "8px",
   };
 
+  const PeriodChanger = () => (
+    <div>
+      <div>
+        <button onClick={previous} disabled={currentPeriodIndex === 0}>{`<`}</button>
+        <div style={periodTextStyle}>{periodText}</div>
+        <button onClick={next} disabled={currentPeriodIndex === periods.length - 1}>{`>`}</button>
+      </div>
+      <Description initialShowText={!!currentPeriod.name} description={currentPeriod.name} onAddDescription={onAddPeriodName} label={'+Period Name'}/>
+      <SpendPeriod period={currentPeriod} onTrySave={onTrySave} onDeleteExpense={onDeleteExpense} allowDelete={currentPeriodIndex === 0}/>
+    </div>
+  );
+
   const onActivePeriod = currentPeriodIndex == 0;
 
   const containerStyle: Partial<CSSProperties> = {
@@ -655,14 +707,7 @@ function App() {
       <OverUnder/>
       <NewExpense onAddExpense={onAddExpense} settings={settings}/>
       <NewPeriodButton/>
-      <div>
-        <div>
-          <button onClick={previous} disabled={currentPeriodIndex === 0}>{`<`}</button>
-          <div style={periodTextStyle}>{periodText}</div>
-          <button onClick={next} disabled={currentPeriodIndex === periods.length - 1}>{`>`}</button>
-        </div>
-        <SpendPeriod period={currentPeriod} onTrySave={onTrySave} onDeleteExpense={onDeleteExpense} allowDelete={currentPeriodIndex === 0}/>
-      </div>
+      <PeriodChanger/>
       {onActivePeriod ? <Settings initial={settings} onChangeSettings={onChangeSettings}/> : null}
       <DataButtons/>
     </div>
