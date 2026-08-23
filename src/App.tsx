@@ -690,7 +690,7 @@ function App() {
   const end = currentPeriod.end ? moment(currentPeriod.end).format(format) : 'now';
   let periodText = `${start} to ${end}`;
 
-  if (moment(currentPeriod.start).isSame(moment(currentPeriod.end), 'day')) {
+  if (currentPeriod.end && moment(currentPeriod.start).isSame(moment(currentPeriod.end), 'day')) {
     periodText = `${start} to ${moment(currentPeriod.end).format("HH:mm")}`;
   }
 
