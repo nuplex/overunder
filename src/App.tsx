@@ -7,12 +7,22 @@ const WARN_THRESHOLD = 0.80;
 const CURRENCIES = ['USD', 'HKD', 'SGD', 'NTD', 'JPY', 'THB'] as const;
 type Currency = typeof CURRENCIES[number];
 
+// TODO add settings for this
+const USDCurrencyConversionMap: Record<Currency, number> = {
+  HKD: 7.5,
+  JPY: 150,
+  NTD: 30,
+  SGD: 1.25,
+  THB: 30,
+  USD: 1
+};
+
 type Expense = {
   currency: Currency;
   amount: number;
   timestamp: number;
   description?: string;
-}
+};
 
 type SpendPeriod = {
   expenses: Expense[];
@@ -23,7 +33,7 @@ type SpendPeriod = {
   start: number;
   end?: number;
   name?: string;
-}
+};
 
 type LimitsSettings = Record<Currency, number>;
 
@@ -51,6 +61,12 @@ function formatTimestamp(timestamp: number) {
   return `${String(date.getDate()).padStart(2, '0')}/${String(date.getMonth() + 1).padStart(2, '0')}/${String(date.getFullYear()).slice(-2)} ${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
 }
 
+function usd(val: number, currency: Currency): number {
+  if (currency === 'USD') {
+    return val;
+  }
+  return Number.parseFloat((val / USDCurrencyConversionMap[currency]).toFixed(2));
+}
 
 function Settings({
   initial,
@@ -249,11 +265,13 @@ const ViewExpense = ({
   setTrySave,
   onDeleteExpense,
   allowDelete,
+  conversionToggled,
 }: {
   exp: Expense;
   setTrySave: ({}: any) => void;
   onDeleteExpense: ({}: any) => void;
   allowDelete: boolean;
+  conversionToggled: boolean;
 }) => {
   const [desc, setDesc] = useState(exp.description);
 
@@ -279,9 +297,12 @@ const ViewExpense = ({
     }
   };
 
+  const amount = conversionToggled ? usd(exp.amount, exp.currency) : exp.amount;
+  const currency: Currency = conversionToggled ? 'USD' : exp.currency;
+
   return (
     <div style={contStyle}>
-      <span style={currencyStyle}>{exp.currency}</span><span>{exp.amount}</span>
+      <span style={currencyStyle}>{currency}</span><span>{amount}</span>
       <p style={timeStyle}>{formatTimestamp(exp.timestamp)}</p>
       <Description initialShowText={!!desc} description={desc} onAddDescription={onAddDescription}/>
       {allowDelete ? <button onClick={() => onDeleteExpense(exp.timestamp)}>Delete</button> : null}
@@ -296,12 +317,14 @@ function SpendPeriod({
   // @ts-ignore
   isMultiCurrency = false,
   allowDelete,
+  conversionToggled,
 }: {
   period: SpendPeriod;
   onTrySave: () => void;
   onDeleteExpense: ({}: any, {}: any) => void;
   isMultiCurrency?: boolean;
   allowDelete: boolean;
+  conversionToggled: boolean;
 }) {
   // @ts-ignore
   //const [expenses, setExpenses] = useState(period.expenses);
@@ -322,7 +345,36 @@ function SpendPeriod({
 
   return (
     <div>
-      {period.expenses.map((e, i) => <ViewExpense key={`${e.timestamp}${i}`} exp={e} setTrySave={onTrySave} onDeleteExpense={onDeleteExpenseInPeriod} allowDelete={allowDelete}/>)}
+      {period.expenses.map((e, i) => <ViewExpense key={`${e.timestamp}${i}`} exp={e} setTrySave={onTrySave} onDeleteExpense={onDeleteExpenseInPeriod} allowDelete={allowDelete} conversionToggled={conversionToggled}/>)}
+    </div>
+  );
+}
+
+const Toggle = ({onToggle, label, index, isActive}:{onToggle: () => void, label: string, index: number, isActive: boolean}) => {
+  const fromBottom = 24 * index;
+  const background = isActive ? "rgba(255,215,0,0.95)" : "rgba(0,0,0,0.05)";
+  const textColor = isActive ? "#333" : undefined;
+
+  const toggleStyle: Partial<CSSProperties> = {
+    background,
+    position: "fixed",
+    bottom: fromBottom,
+    right: 24,
+    border: "none",
+    borderRadius: "50px",
+    width: "48px",
+    height: "48px",
+    marginBlock: "4px",
+    lineHeight: "48px",
+    fontSize: "22px",
+    fontWeight: "bolder",
+    color: textColor,
+    cursor: "pointer",
+  };
+
+  return (
+    <div style={toggleStyle} onClick={onToggle}>
+      {label}
     </div>
   );
 }
@@ -343,6 +395,7 @@ function App() {
   const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
   const [triedLoad, setTriedLoad] = useState(false);
   const [trySave, setTrySave] = useState(false);
+  const [toggleConversion, setToggleConversion] = useState(false);
 
   const loadFromBrowser = (): SpendPeriod[] | undefined => {
     // TODO remove expensesJson once initial data is put into periods format
@@ -555,6 +608,10 @@ function App() {
     }
   }
 
+  const onToggleConversion = () => {
+    setToggleConversion(!toggleConversion);
+  }
+
   const previous = () => {
     if (currentPeriodIndex > 0) {
       const newIdx = currentPeriodIndex - 1;
@@ -586,9 +643,14 @@ function App() {
       margin: "4px"
     };
 
-    const limit = currentPeriod?.limit ?? settings.limits[settings.currency];
-    let color = spent >= limit ? 'red' : 'green';
-    color = spent >= (limit * WARN_THRESHOLD) && spent < limit ? 'orange' : color;
+    let limit = currentPeriod?.limit ?? settings.limits[settings.currency];
+    let displaySpent = spent;
+    if (toggleConversion) {
+      limit = usd(limit, currentPeriod.currency);
+      displaySpent = usd(displaySpent, currentPeriod.currency);
+    }
+    let color = displaySpent >= limit ? 'red' : 'green';
+    color = displaySpent >= (limit * WARN_THRESHOLD) && displaySpent < limit ? 'orange' : color;
     const spentNumberStyle: Partial<CSSProperties> = {
       color,
       fontSize: "28px",
@@ -607,24 +669,27 @@ function App() {
 
     /* Local Compute */
 
-    let overunderText =  spent > limit ? 'over' : 'stay under';
-    overunderText = spent >= (limit * WARN_THRESHOLD) && spent < limit ? 'stay under!' : overunderText;
-    overunderText = spent === limit ? 'at' : overunderText;
+    let overunderText =  displaySpent > limit ? 'over' : 'stay under';
+    overunderText = displaySpent >= (limit * WARN_THRESHOLD) && displaySpent < limit ? 'stay under!' : overunderText;
+    overunderText = displaySpent === limit ? 'at' : overunderText;
     if (currentPeriodIndex > 0) {
-      overunderText = spent > limit ? ' went over' : 'stayed under';
-      overunderText = spent >= (limit * WARN_THRESHOLD) && spent < limit ? 'got close to' : overunderText;
-      overunderText = spent === limit ? 'was at' : overunderText;
+      overunderText = displaySpent > limit ? ' went over' : 'stayed under';
+      overunderText = displaySpent >= (limit * WARN_THRESHOLD) && displaySpent < limit ? 'got close to' : overunderText;
+      overunderText = displaySpent === limit ? 'was at' : overunderText;
     }
 
     const spentText = currentPeriodIndex === 0 ? 'spent so far' : 'spent';
 
-    const currencyDisplay = currentPeriodIndex === 0 ? settings.currency : currentPeriod.currency;
+    let currencyDisplay = currentPeriodIndex === 0 ? settings.currency : currentPeriod.currency;
+    if (toggleConversion) {
+      currencyDisplay = 'USD';
+    }
 
     return (
       <div style={contStyle}>
         <h5 style={spentStyle}>{spentText}</h5>
         <div>
-          <span>{currencyDisplay}</span><span style={spentNumberStyle}>{spent}</span>
+          <span>{currencyDisplay}</span><span style={spentNumberStyle}>{displaySpent}</span>
         </div>
         <h6 style={overunderStyle}>{overunderText}</h6>
         <div>
@@ -710,7 +775,7 @@ function App() {
         <button onClick={next} disabled={currentPeriodIndex === periods.length - 1}>{`>`}</button>
       </div>
       <Description initialShowText={!!currentPeriod.name} description={currentPeriod.name} onAddDescription={onAddPeriodName} label={'+Period Name'}/>
-      <SpendPeriod period={currentPeriod} onTrySave={onTrySave} onDeleteExpense={onDeleteExpense} allowDelete={currentPeriodIndex === 0}/>
+      <SpendPeriod period={currentPeriod} onTrySave={onTrySave} onDeleteExpense={onDeleteExpense} allowDelete={currentPeriodIndex === 0} conversionToggled={toggleConversion}/>
     </div>
   );
 
@@ -728,6 +793,7 @@ function App() {
       <PeriodChanger/>
       {onActivePeriod ? <Settings initial={settings} onChangeSettings={onChangeSettings}/> : null}
       <DataButtons/>
+      <Toggle onToggle={onToggleConversion} label={'$'} index={1} isActive={toggleConversion}/>
     </div>
   )
 }
