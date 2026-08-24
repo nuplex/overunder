@@ -544,11 +544,13 @@ function App() {
       setPeriods(inPlacePeriods);
       setCurrentPeriod(newPeriod);
       setCurrentPeriodIndex(0);
+      setSpent(0);
       setTrySave(true);
     } else {
       setPeriods([newPeriod, ...periods]);
       setCurrentPeriod(newPeriod);
       setCurrentPeriodIndex(0);
+      setSpent(0);
       setTrySave(true);
     }
   }
