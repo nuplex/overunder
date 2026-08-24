@@ -129,8 +129,8 @@ function Settings({
         <label>
           {currency} Limit:&nbsp;
           <input style={inputStyle} type="number" value={val}
-                 onBlur={() => onChangeLimitSettings(currency, val)}
-                 onChange={(e) => setVal(parseInt(e.target.value))}/>
+                 onBlur={() => onChangeLimitSettings(currency, parseFloat(val.toFixed(2)))}
+                 onChange={(e) => setVal(parseFloat(e.target.value))}/>
         </label>
       </div>
     );
@@ -183,7 +183,7 @@ const NewExpense = ({
   }
 
   const onChangeExpense = (e: any) => {
-    const newVal = parseInt(e.target.value);
+    const newVal = parseFloat(e.target.value);
     setExpense(newVal);
   }
 
@@ -398,40 +398,8 @@ function App() {
   const [toggleConversion, setToggleConversion] = useState(false);
 
   const loadFromBrowser = (): SpendPeriod[] | undefined => {
-    // TODO remove expensesJson once initial data is put into periods format
-    const expensesJson = document.cookie
-    .split("; ")
-    .find((row) => row.startsWith("expenses="))
-    ?.split("=")[1];
-
     let periodsJson = localStorage.getItem('periods') ?? undefined;
     let settingsJson = localStorage.getItem('settings') ?? undefined;
-
-    // TODO remove cookie retrieval once initial data is gotten from localStorage
-    if (!periodsJson) {
-      periodsJson = document.cookie
-      .split("; ")
-      .find((row) => row.startsWith("periods="))
-      ?.split("=")[1];
-    }
-
-    // TODO remove cookie retrieval once initial data is gotten from localStorage
-    if (!settingsJson) {
-      settingsJson = document.cookie
-      .split("; ")
-      .find((row) => row.startsWith("settings="))
-      ?.split("=")[1];
-    }
-
-
-    // TODO remove expensesJson once initial data is put into periods format
-    if (expensesJson && !periodsJson) {
-      const loadedExpenses = JSON.parse(expensesJson);
-      let newSpend = 0;
-      loadedExpenses.forEach((e: Expense) => newSpend += e.amount);
-
-      setSpent(newSpend);
-    }
 
     let loaded;
     if (periodsJson) {
@@ -448,39 +416,12 @@ function App() {
     if (settingsJson) {
       const loadedSettings = JSON.parse(settingsJson);
       setSettings(loadedSettings);
-
-      // TODO, remove once intial data is wrapped in a period
-      if (!periodsJson && expensesJson) {
-        const loadedExpenses: Expense[] = JSON.parse(expensesJson);
-        const currency = loadedExpenses[0].currency;
-        let total = 0;
-        loadedExpenses.forEach((e: Expense) => total += e.amount);
-
-        const newPeriod: SpendPeriod = {
-          expenses: loadedExpenses,
-          limit: settings.limits[currency],
-          currency,
-          start: loadedExpenses[loadedExpenses.length - 1].timestamp,
-          total,
-        };
-
-        setPeriods([newPeriod]);
-        setCurrentPeriod(newPeriod);
-
-        return [newPeriod];
-      }
     }
 
     if (loaded) return loaded;
   };
 
   const saveToBrowser = () => {
-    // TODO remove cookie storage
-    const periodsString = JSON.stringify(periods);
-    document.cookie = `periods=${periodsString}; max-age=31536000`;
-    const settingsString = JSON.stringify(settings);
-    document.cookie = `settings=${settingsString}; max-age=31536000`;
-
     // TODO need to check if periods is full and retrieve from second item
     localStorage.setItem('periods', JSON.stringify(periods));
     localStorage.setItem('settings', JSON.stringify(settings));
