@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="120" height="120">
+  <defs>
+    <clipPath id="a" clipPathUnits="userSpaceOnUse">
+      <path d="M0 60h120v60H0z" style="fill:#448c3f;fill-opacity:1;stroke-width:0;stroke-linecap:round;stroke-linejoin:round"/>
+    </clipPath>
+    <clipPath id="b" clipPathUnits="userSpaceOnUse">
+      <path d="M0 0h120v60H0z" style="fill:#448c3f;fill-opacity:1;stroke-width:0;stroke-linecap:round;stroke-linejoin:round"/>
+    </clipPath>
+  </defs>
+  <path d="M99.275 80.181q0 7.747-4.213 14.27-4.077 6.387-12.095 10.328-7.882 3.941-19.026 4.35V120H55.38v-11.144q-14.949-1.359-24.462-9.105-9.377-7.746-9.92-21.065H49.4q.543 6.931 5.98 9.106V70.396q-11.416-3.125-17.94-5.707-6.523-2.718-11.687-8.698-5.028-5.98-5.028-16.308 0-8.562 4.484-14.813 4.62-6.388 12.503-9.785 7.882-3.534 17.667-4.077V0h8.562v11.008q15.085 1.087 23.919 8.697 8.97 7.61 9.92 20.93H69.105q-.543-6.252-5.164-8.29v17.259l3.398 1.087q9.784 2.718 16.172 5.708 6.523 2.854 11.144 8.697 4.62 5.708 4.62 15.085M49.128 38.46q0 4.892 6.251 8.018v-14.95q-6.251 1.088-6.251 6.932M63.94 88.47q3.262-.68 5.164-2.582 1.903-2.038 1.903-5.028 0-4.757-7.067-7.747z" aria-label="$" clip-path="url(#a)" style="font-weight:800;font-size:135.901px;font-family:Poppins;-inkscape-font-specification:&quot;Poppins Ultra-Bold&quot;;fill:#7dd87d;stroke-width:0;stroke-linecap:round;stroke-linejoin:round"/>
+  <path d="M99.275 80.181q0 7.747-4.213 14.27-4.077 6.387-12.095 10.328-7.882 3.941-19.026 4.35V120H55.38v-11.144q-14.949-1.359-24.462-9.105-9.377-7.746-9.92-21.065H49.4q.543 6.931 5.98 9.106V70.396q-11.416-3.125-17.94-5.707-6.523-2.718-11.687-8.698-5.028-5.98-5.028-16.308 0-8.562 4.484-14.813 4.62-6.388 12.503-9.785 7.882-3.534 17.667-4.077V0h8.562v11.008q15.085 1.087 23.919 8.697 8.97 7.61 9.92 20.93H69.105q-.543-6.252-5.164-8.29v17.259l3.398 1.087q9.784 2.718 16.172 5.708 6.523 2.854 11.144 8.697 4.62 5.708 4.62 15.085M49.128 38.46q0 4.892 6.251 8.018v-14.95q-6.251 1.088-6.251 6.932M63.94 88.47q3.262-.68 5.164-2.582 1.903-2.038 1.903-5.028 0-4.757-7.067-7.747z" aria-label="$" clip-path="url(#b)" style="font-weight:800;font-size:135.901px;font-family:Poppins;-inkscape-font-specification:&quot;Poppins Ultra-Bold&quot;;fill:#de8787;stroke-width:0;stroke-linecap:round;stroke-linejoin:round"/>
+  <path d="M0 60h120" style="fill:#d40000;stroke-width:0;stroke-linecap:round;stroke-linejoin:round"/>
+  <path d="M0 55.782h120v8.436H0z" style="fill:#1a1a1a;stroke-width:0;stroke-linecap:round;stroke-linejoin:round"/>
+</svg>
