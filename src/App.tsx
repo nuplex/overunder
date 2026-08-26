@@ -22,6 +22,7 @@ type Expense = {
   amount: number;
   timestamp: number;
   description?: string;
+  excluded?: boolean;
 };
 
 type SpendPeriod = {
@@ -201,11 +202,13 @@ const Description = ({
   description,
   onAddDescription,
   label = '+Desc',
+  initialButtonStyle
 }:{
   initialShowText: boolean;
   description?: string;
   onAddDescription: ({}: any) => void;
   label?: string;
+  initialButtonStyle?: Partial<CSSProperties>;
 }) => {
   const [text, setText] = useState(description);
   const [showText, setShowText] = useState(initialShowText);
@@ -236,7 +239,7 @@ const Description = ({
   if (((!showText || !text) || (showText && !text)) && !editing) {
     return (
       <div>
-        <button onClick={onClickEdit}>{label}</button>
+        <button style={initialButtonStyle} onClick={onClickEdit}>{label}</button>
       </div>
     )
   }
@@ -260,20 +263,65 @@ const Description = ({
   )
 }
 
-const ViewExpense = ({
+function ViewExpense ({
   exp,
   setTrySave,
   onDeleteExpense,
+  onExcludeExpense,
   allowDelete,
   conversionToggled,
 }: {
   exp: Expense;
   setTrySave: ({}: any) => void;
   onDeleteExpense: ({}: any) => void;
+  onExcludeExpense: () => void;
   allowDelete: boolean;
   conversionToggled: boolean;
-}) => {
+})  {
   const [desc, setDesc] = useState(exp.description);
+  const [excluded, setExcluded] = useState(exp.excluded);
+
+  const onAddDescription = (text: string) => {
+    if (text !== undefined) {
+      exp.description = text;
+      setDesc(text);
+      setTrySave(true);
+    }
+  };
+
+  const onExcludeExpenseLocal = () => {
+    exp.excluded = !exp.excluded;
+    onExcludeExpense();
+    setExcluded(true);
+  }
+
+  // TODO for decimal currencies, do toFixed(2) on them
+  const amount = conversionToggled ? usd(exp.amount, exp.currency) : exp.amount;
+  const currency: Currency = conversionToggled ? 'USD' : exp.currency;
+
+  const allowExclude = allowDelete; // Just a simple alias for now.
+  const excludeText = exp.excluded ? 'Include' : 'Exclude';
+  const excludeBtnStyle: Partial<CSSProperties> = {
+    fontSize: "11px",
+  };
+
+  const deleteContStyle: Partial<CSSProperties> = {
+    marginBlock: "0",
+  };
+
+  const deleteBtnStyle: Partial<CSSProperties> = {
+    fontSize: "11px",
+  };
+
+  const descButtonStyle: Partial<CSSProperties> = {
+    fontSize: "11px",
+  };
+
+  const excludedTexStyle: Partial<CSSProperties> = {
+    fontSize: "10px",
+    lineHeight: "10px",
+    marginBottom: "0",
+  };
 
   const contStyle: Partial<CSSProperties> = {
     marginBlock: "10px",
@@ -289,31 +337,23 @@ const ViewExpense = ({
     marginTop: "4px",
   };
 
-  const onAddDescription = (text: string) => {
-    if (text !== undefined) {
-      exp.description = text;
-      setDesc(text);
-      setTrySave(true);
-    }
-  };
-
-  const amount = conversionToggled ? usd(exp.amount, exp.currency) : exp.amount;
-  const currency: Currency = conversionToggled ? 'USD' : exp.currency;
-
   return (
     <div style={contStyle}>
+      {excluded ? <p style={excludedTexStyle}>Excluded</p> : null}
       <span style={currencyStyle}>{currency}</span><span>{amount}</span>
       <p style={timeStyle}>{formatTimestamp(exp.timestamp)}</p>
-      <Description initialShowText={!!desc} description={desc} onAddDescription={onAddDescription}/>
-      {allowDelete ? <button onClick={() => onDeleteExpense(exp.timestamp)}>Delete</button> : null}
+      <Description initialButtonStyle={descButtonStyle} initialShowText={!!desc} description={desc} onAddDescription={onAddDescription}/>
+      {allowExclude ? <button style={excludeBtnStyle} onClick={onExcludeExpenseLocal}>{excludeText}</button> : null}
+      {allowDelete ? <AreYouSure initialButtonStyle={deleteBtnStyle} initialButtonLabel={'Delete'} onYes={() => onDeleteExpense(exp.timestamp)} containerStyle={deleteContStyle}/> : null}
     </div>
   )
-};
+}
 
 function SpendPeriod({
   period,
   onTrySave,
   onDeleteExpense,
+  onExcludeExpense,
   // @ts-ignore
   isMultiCurrency = false,
   allowDelete,
@@ -322,6 +362,7 @@ function SpendPeriod({
   period: SpendPeriod;
   onTrySave: () => void;
   onDeleteExpense: ({}: any, {}: any) => void;
+  onExcludeExpense: ({}: any, {}: any) => void;
   isMultiCurrency?: boolean;
   allowDelete: boolean;
   conversionToggled: boolean;
@@ -338,21 +379,40 @@ function SpendPeriod({
     period.expenses = newExpenses;
     period.total = newSpend;
     const newPeriod: SpendPeriod = {...period}
-    //setExpenses(newExpenses);
     onDeleteExpense(newPeriod, newSpend);
-    //onTrySave();
-  }
+  };
+
+  const onExcludeExpenseInPeriod = () => {
+    let newSpend = 0;
+    period.expenses.forEach((e) => {
+      if (!e.excluded) {
+        newSpend += e.amount;
+      }
+    });
+
+    period.total = newSpend;
+    onExcludeExpense(period, newSpend);
+  };
 
   return (
     <div>
-      {period.expenses.map((e, i) => <ViewExpense key={`${e.timestamp}${i}`} exp={e} setTrySave={onTrySave} onDeleteExpense={onDeleteExpenseInPeriod} allowDelete={allowDelete} conversionToggled={conversionToggled}/>)}
+      {period.expenses.map((e, i) =>
+        <ViewExpense
+          key={`${e.timestamp}${i}`}
+          exp={e}
+          setTrySave={onTrySave}
+          onDeleteExpense={onDeleteExpenseInPeriod}
+          onExcludeExpense={onExcludeExpenseInPeriod}
+          allowDelete={allowDelete}
+          conversionToggled={conversionToggled}
+        />)}
     </div>
   );
 }
 
 const Toggle = ({onToggle, label, index, isActive}:{onToggle: () => void, label: string, index: number, isActive: boolean}) => {
   const fromBottom = 24 * index;
-  const background = isActive ? "rgba(255,215,0,0.95)" : "rgba(0,0,0,0.05)";
+  const background = isActive ? "rgba(255,215,0,0.95)" : "rgba(230,230,230,0.95)";
   const textColor = isActive ? "#333" : undefined;
 
   const toggleStyle: Partial<CSSProperties> = {
@@ -370,11 +430,52 @@ const Toggle = ({onToggle, label, index, isActive}:{onToggle: () => void, label:
     fontWeight: "bolder",
     color: textColor,
     cursor: "pointer",
+    userSelect: "none"
   };
 
   return (
     <div style={toggleStyle} onClick={onToggle}>
       {label}
+    </div>
+  );
+}
+
+function AreYouSure({
+  initialButtonLabel,
+  onYes,
+  containerStyle,
+  initialButtonStyle
+}:{
+  initialButtonLabel: string;
+  onYes: () => void;
+  containerStyle?: Partial<CSSProperties>;
+  initialButtonStyle?: Partial<CSSProperties>;
+})  {
+  const [showAreYouSure, setShowAreYouSure] = useState(false);
+
+  const onInitialClick = () => setShowAreYouSure(true);
+
+  const textStyle: Partial<CSSProperties> = {
+    fontSize: "14px"
+  };
+
+  const contStyle: Partial<CSSProperties> = containerStyle ?? {
+    marginTop: "8px",
+    marginBottom: "8px"
+  };
+
+  const YesOrNo = () => (
+    <div>
+      <span style={textStyle}>Are you sure?</span>&nbsp;
+      <button onClick={onYes}>Yes</button>&nbsp;
+      <button onClick={() => setShowAreYouSure(false)}>No</button>
+    </div>
+  );
+
+  return (
+    <div style={contStyle}>
+      {!showAreYouSure ? <button style={initialButtonStyle} onClick={onInitialClick}>{initialButtonLabel}</button> : null}
+      {showAreYouSure ? <YesOrNo/> : null}
     </div>
   );
 }
@@ -496,7 +597,7 @@ function App() {
     setCurrentPeriod(newPeriod);
     setSpent(newSpend);
     setTrySave(true);
-  }
+  };
 
   const onDeleteExpense = (newPeriod: SpendPeriod, newSpend: number) =>{
     const newPeriods = [...periods];
@@ -505,17 +606,27 @@ function App() {
     setCurrentPeriod(newPeriod);
     setSpent(newSpend);
     setTrySave(true);
-  }
+  };
+
+  const onExcludeExpense = (period: SpendPeriod, newSpend: number) => {
+    const newPeriod = {...period};
+    const newPeriods = [...periods];
+    newPeriods[currentPeriodIndex] = newPeriod;
+    setPeriods(newPeriods);
+    setCurrentPeriod(newPeriod);
+    setSpent(newSpend);
+    setTrySave(true);
+  };
 
   const onTrySave = () => {
     setTrySave(true);
-  }
+  };
 
   // @ts-ignore
   const onChangePeriodIndex = (idx: number) => {
     setCurrentPeriodIndex(idx);
     setCurrentPeriod(periods[idx]);
-  }
+  };
 
   const onEndPeriod = () => {
     // Not the current period that is being display, which is what it normally means.
@@ -547,11 +658,11 @@ function App() {
       setSpent(0);
       setTrySave(true);
     }
-  }
+  };
 
   const onToggleConversion = () => {
     setToggleConversion(!toggleConversion);
-  }
+  };
 
   const previous = () => {
     if (currentPeriodIndex > 0) {
@@ -586,6 +697,13 @@ function App() {
 
     let limit = currentPeriod?.limit ?? settings.limits[settings.currency];
     let displaySpent = spent;
+    let allExpensesSpent = 0;
+    currentPeriod.expenses.forEach((e) => {
+      allExpensesSpent += e.amount;
+    });
+    const showAllExpensesSpent = displaySpent != allExpensesSpent;
+
+
     if (toggleConversion) {
       limit = usd(limit, currentPeriod.currency);
       displaySpent = usd(displaySpent, currentPeriod.currency);
@@ -626,12 +744,28 @@ function App() {
       currencyDisplay = 'USD';
     }
 
+    const allExpensesSpentContStyle: Partial<CSSProperties> = {
+      margin: "0",
+      fontSize: "8px",
+      lineHeight: "10px",
+    };
+
+    const allExpensesSpentNumberStyle: Partial<CSSProperties> = {
+      fontSize: "10px",
+      fontWeight: "bold",
+    };
+
+    const allExpensesSpentCurrencyStyle: Partial<CSSProperties> = {
+      fontSize: "8px"
+    };
+
     return (
       <div style={contStyle}>
         <h5 style={spentStyle}>{spentText}</h5>
         <div>
           <span>{currencyDisplay}</span><span style={spentNumberStyle}>{displaySpent}</span>
         </div>
+        {showAllExpensesSpent ? <div style={allExpensesSpentContStyle}>(<span style={allExpensesSpentCurrencyStyle}>{currencyDisplay}</span><span style={allExpensesSpentNumberStyle}>{allExpensesSpent}</span>)</div> : null}
         <h6 style={overunderStyle}>{overunderText}</h6>
         <div>
           <span>{currencyDisplay}</span><span style={limitNumberStyle}>{limit}</span>
@@ -650,37 +784,6 @@ function App() {
         <button style={btnStyle} onClick={loadFromBrowser}>Load Again</button>
       </div>
     )
-  }
-
-  const newPeriodStyle: Partial<CSSProperties> = {
-    marginTop: "16px",
-    marginBottom: "8px"
-  }
-
-  const NewPeriodButton = () => {
-    const [showAreYouSure, setShowAreYouSure] = useState(false);
-
-    const onInitialClick = () => setShowAreYouSure(true);
-
-    const textStyle: Partial<CSSProperties> = {
-      fontSize: "14px"
-    };
-
-    // TODO this can just be made into a generic component
-    const AreYouSure = () => (
-      <div>
-        <span style={textStyle}>Are you sure?</span>&nbsp;
-        <button onClick={onEndPeriod}>Yes</button>&nbsp;
-        <button onClick={() => setShowAreYouSure(false)}>No</button>
-      </div>
-    );
-
-    return (
-      <div style={newPeriodStyle}>
-        {!showAreYouSure ? <button onClick={onInitialClick}>Start New Spend Period</button> : null}
-        {showAreYouSure ? <AreYouSure/> : null}
-      </div>
-    );
   };
 
   const onAddPeriodName = (name: string) => {
@@ -691,7 +794,7 @@ function App() {
     setCurrentPeriod(newPeriod);
     setPeriods(newPeriods);
     setTrySave(true);
-  }
+  };
 
   const format = "ddd D MMM, YYYY HH:mm";
   const start = moment(currentPeriod.start).format(format);
@@ -716,7 +819,7 @@ function App() {
         <button onClick={next} disabled={currentPeriodIndex === periods.length - 1}>{`>`}</button>
       </div>
       <Description initialShowText={!!currentPeriod.name} description={currentPeriod.name} onAddDescription={onAddPeriodName} label={'+Period Name'}/>
-      <SpendPeriod period={currentPeriod} onTrySave={onTrySave} onDeleteExpense={onDeleteExpense} allowDelete={currentPeriodIndex === 0} conversionToggled={toggleConversion}/>
+      <SpendPeriod period={currentPeriod} onTrySave={onTrySave} onDeleteExpense={onDeleteExpense} onExcludeExpense={onExcludeExpense} allowDelete={currentPeriodIndex === 0} conversionToggled={toggleConversion}/>
     </div>
   );
 
@@ -724,13 +827,18 @@ function App() {
 
   const containerStyle: Partial<CSSProperties> = {
     marginBottom: "100px",
-  }
+  };
+
+  const newPeriodStyle: Partial<CSSProperties> = {
+    marginTop: "16px",
+    marginBottom: "8px"
+  };
 
   return (
     <div style={containerStyle}>
       <OverUnder/>
       <NewExpense onAddExpense={onAddExpense} settings={settings}/>
-      <NewPeriodButton/>
+      <AreYouSure initialButtonLabel={'Start New Spend Period'} onYes={onEndPeriod} containerStyle={newPeriodStyle}/>
       <PeriodChanger/>
       {onActivePeriod ? <Settings initial={settings} onChangeSettings={onChangeSettings}/> : null}
       <DataButtons/>
