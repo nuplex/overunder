@@ -1,6 +1,20 @@
 import './App.css'
-import {type CSSProperties, useState} from "react";
+import {type CSSProperties, type JSX, useState} from "react";
 import moment from "moment";
+
+type CSS = Partial<CSSProperties>;
+  
+type Icon = 'currencyConversion' | 'stats';
+const ICONS: Record<Icon, JSX.Element> = {
+  currencyConversion:
+    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="#1f1f1f" viewBox="0 -960 960 960">
+      <path d="M480-40q-112 0-206-51T120-227v107H40v-240h240v80h-99q48 72 126.5 116T480-120q75 0 140.5-28.5t114-77 77-114T840-480h80q0 91-34.5 171T791-169 651-74.5 480-40m-36-160v-52q-47-11-76.5-40.5T324-370l66-26q12 41 37.5 61.5T486-314t56.5-15.5T566-378q0-29-24.5-47T454-466q-59-21-86.5-50T340-592q0-41 28.5-74.5T446-710v-50h70v50q36 3 65.5 29t40.5 61l-64 26q-8-23-26-38.5T482-648q-35 0-53.5 15T410-592t23 41 83 35q72 26 96 61t24 77q0 29-10 51t-26.5 37.5-38.5 25-47 14.5v50zM40-480q0-91 34.5-171T169-791t140-94.5T480-920q112 0 206 51t154 136v-107h80v240H680v-80h99q-48-72-126.5-116T480-840q-75 0-140.5 28.5t-114 77-77 114T120-480z"/>
+    </svg>,
+  stats:
+    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="#1f1f1f" viewBox="0 -960 960 960">
+      <path d="M160-160v-320h160v320zm240 0v-640h160v640zm240 0v-440h160v440z"/>
+    </svg>
+};
 
 const WARN_THRESHOLD = 0.80;
 
@@ -55,18 +69,174 @@ const DEFAULT_SETTINGS: Settings = {
   }
 };
 
-// AI
-function formatTimestamp(timestamp: number) {
-  const date = new Date(timestamp);
-
-  return `${String(date.getDate()).padStart(2, '0')}/${String(date.getMonth() + 1).padStart(2, '0')}/${String(date.getFullYear()).slice(-2)} ${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
-}
+const BOILERPLATE_PERIOD: SpendPeriod = {
+  expenses: [],
+  limit: DEFAULT_SETTINGS.limits['USD'],
+  currency: 'USD',
+  start: Date.now(),
+  total: 0,
+};
 
 function usd(val: number, currency: Currency): number {
   if (currency === 'USD') {
     return val;
   }
   return Number.parseFloat((val / USDCurrencyConversionMap[currency]).toFixed(2));
+}
+
+// TODO implement later
+// function convert(val: number, currencyFrom: Currency, currencyTo: Currency): number {
+//   if (currency === 'USD') {
+//     return val;
+//   }
+//   return Number.parseFloat((val / USDCurrencyConversionMap[currency]).toFixed(2));
+// }
+
+type StatPage = 'compact';
+const StatPageTitleMap: Record<StatPage, string> = {
+  'compact': 'recent overunders'
+}
+
+function ModalContext({onClickBackground, children}:{onClickBackground: () => void, children: any}){
+  const style: CSS = {
+    background: "rgba(61,93,140,0.05)",
+    display: "flex",
+    position: "fixed",
+    width: "100vw",
+    height: "100vh",
+    justifyContent: "center",
+    top: 0,
+    left: 0,
+    zIndex: 2,
+  };
+
+  const onClickBackgroundLocal = (e: any) => {
+    e.preventDefault();
+    e.stopPropagation();
+    onClickBackground();
+  };
+
+  return <div style={style} onClick={onClickBackgroundLocal}>{children}</div>
+}
+
+
+function Stats({
+  periods,
+  settings,
+  onClose,
+  toggleConversion,
+}: {
+  periods: SpendPeriod[];
+  settings: Settings;
+  onClose: () => void;
+  toggleConversion: boolean;
+}) {
+  // @ts-ignore
+  const [page, setPage] = useState<StatPage>('compact');
+
+  let statDisplay;
+
+  if (page === 'compact') {
+    let totalLast7PeriodsOfSameCurrency = 0;
+    let sameCurrencyMatch = 1;
+    for (let i = 0; sameCurrencyMatch <= 7 && i < periods.length; i++) {
+      const period = periods[i];
+      if (period.currency === settings.currency) {
+        totalLast7PeriodsOfSameCurrency += period.total;
+      }
+    }
+
+    let last7PeriodsOfSameCurrencyText = totalLast7PeriodsOfSameCurrency > 0 ? `last 7 periods: ${settings.currency}${totalLast7PeriodsOfSameCurrency}` : `no periods have ${settings.currency} (change in settings)`;
+    if (toggleConversion) {
+      usd(totalLast7PeriodsOfSameCurrency, settings.currency);
+      last7PeriodsOfSameCurrencyText = totalLast7PeriodsOfSameCurrency > 0 ? `last 7 periods: USD${usd(totalLast7PeriodsOfSameCurrency, settings.currency)}` : last7PeriodsOfSameCurrencyText;
+    }
+
+    statDisplay = (
+      <div>
+        {periods.map((p) => {
+          let limit = toggleConversion ? usd(p.limit, p.currency) : p.limit;
+          let total = toggleConversion ? usd(p.total, p.currency) : p.total;
+          let currency: Currency = toggleConversion ? 'USD' : p.currency;
+          let text = total > limit ? 'over' : 'under';
+          text = total === limit ? 'at' : text;
+          let color = total >= limit ? 'red' : 'green';
+          color = total >= (limit * WARN_THRESHOLD) && total < limit ? 'orange' : color;
+
+          const priceFont: CSS = {
+            fontSize: "16px",
+            fontWeight: "bold"
+          };
+
+          const totalStyle: CSS = {
+            color,
+            ...priceFont
+          };
+
+          const currencyStyle: CSS = {
+            fontSize: "10px",
+          };
+
+          const overunderStyle: CSS = {
+            color,
+            fontSize: "14px",
+          };
+
+          return (
+            <div key={p.start}>
+              <span style={currencyStyle}>{currency}</span>
+              <span style={totalStyle}>{total}</span>
+              <span style={overunderStyle}>&nbsp;{text}&nbsp;</span>
+              <span style={currencyStyle}>{currency}</span>
+              <span style={priceFont}>{limit}</span>
+            </div>
+          );
+        })}
+        <div>
+          {last7PeriodsOfSameCurrencyText}
+        </div>
+      </div>
+    );
+  }
+
+  const titleStyle: CSS = {
+    marginBlock: "8px"
+  };
+
+  const buttonContStyle: CSS = {
+    bottom: 0,
+    left: 0,
+    width: "100%",
+    marginBottom: "20px",
+    position: "absolute",
+    display: "flex",
+    justifyContent: "center",
+  };
+
+  const styleStatsContainer: CSS = {
+    background: "white",
+    border: "none",
+    borderRadius: "3px",
+    minWidth: "300px",
+    minHeight: "500px",
+    marginBlock: "3em",
+    marginInline: "6em",
+    padding: "18px",
+    position: "relative",
+    zIndex: 3,
+  };
+  
+  return (
+    <div style={styleStatsContainer}>
+      <h4 style={titleStyle}>{StatPageTitleMap[page]}</h4>
+      {statDisplay}
+      <div style={buttonContStyle}>
+        {/*TODO previous stat button*/}
+        <button onClick={onClose}>Close</button>
+        {/*TODO next stat button*/}
+      </div>
+    </div>
+  );
 }
 
 function Settings({
@@ -92,7 +262,7 @@ function Settings({
 
   const CurrencyBadge = ({currency}:{currency: Currency}) => {
     const bgColor = currency === currCurrency ? 'gold' : 'white';
-    const style: Partial<CSSProperties> = {
+    const style: CSS = {
       backgroundColor: bgColor,
       borderRadius: "50px",
       cursor: "pointer",
@@ -115,13 +285,13 @@ function Settings({
   const LimitInput = ({currency}:{currency: Currency}) => {
     const [val, setVal] = useState(limits[currency]);
 
-    const inputStyle: Partial<CSSProperties> = {
+    const inputStyle: CSS = {
       fontSize: '18px',
       height: '24px',
       width: '80px',
     };
 
-    const divStyle: Partial<CSSProperties> = {
+    const divStyle: CSS = {
       marginBlock: '8px'
     };
 
@@ -137,7 +307,7 @@ function Settings({
     );
   };
 
-  const contStyle: Partial<CSSProperties> = {
+  const contStyle: CSS = {
     marginBlock: "12px"
   };
 
@@ -149,16 +319,16 @@ function Settings({
   )
 }
 
-const NewExpense = ({
+function NewExpense({
   onAddExpense,
   settings
 }:{
   onAddExpense: ({}: any) => void;
   settings: Settings;
-}) => {
+}){
   const [expense, setExpense] = useState(0);
 
-  const inputStyle: Partial<CSSProperties> = {
+  const inputStyle: CSS = {
     border: "none",
     borderBottom: "2px solid #333",
     fontSize: "36px",
@@ -166,7 +336,7 @@ const NewExpense = ({
     width: "150px",
   };
 
-  const buttonStyle: Partial<CSSProperties> = {
+  const buttonStyle: CSS = {
     height: "50px",
     width: "50px",
     fontWeight: "bolder",
@@ -195,9 +365,9 @@ const NewExpense = ({
       <button style={buttonStyle} onClick={onAddExpenseLocal}>+</button>
     </div>
   );
-};
+}
 
-const Description = ({
+function Description({
   initialShowText,
   description,
   onAddDescription,
@@ -208,13 +378,13 @@ const Description = ({
   description?: string;
   onAddDescription: ({}: any) => void;
   label?: string;
-  initialButtonStyle?: Partial<CSSProperties>;
-}) => {
+  initialButtonStyle?: CSS;
+}){
   const [text, setText] = useState(description);
   const [showText, setShowText] = useState(initialShowText);
   const [editing, setEditing] = useState(false);
 
-  const textStyle: Partial<CSSProperties> = {
+  const textStyle: CSS = {
     fontSize: "12px"
   };
 
@@ -301,37 +471,37 @@ function ViewExpense ({
 
   const allowExclude = allowDelete; // Just a simple alias for now.
   const excludeText = exp.excluded ? 'Include' : 'Exclude';
-  const excludeBtnStyle: Partial<CSSProperties> = {
+  const excludeBtnStyle: CSS = {
     fontSize: "11px",
   };
 
-  const deleteContStyle: Partial<CSSProperties> = {
+  const deleteContStyle: CSS = {
     marginBlock: "0",
   };
 
-  const deleteBtnStyle: Partial<CSSProperties> = {
+  const deleteBtnStyle: CSS = {
     fontSize: "11px",
   };
 
-  const descButtonStyle: Partial<CSSProperties> = {
+  const descButtonStyle: CSS = {
     fontSize: "11px",
   };
 
-  const excludedTexStyle: Partial<CSSProperties> = {
+  const excludedTexStyle: CSS = {
     fontSize: "10px",
     lineHeight: "10px",
     marginBottom: "0",
   };
 
-  const contStyle: Partial<CSSProperties> = {
+  const contStyle: CSS = {
     marginBlock: "10px",
   };
 
-  const currencyStyle: Partial<CSSProperties> = {
+  const currencyStyle: CSS = {
     fontSize: "12px",
   };
 
-  const timeStyle: Partial<CSSProperties> = {
+  const timeStyle: CSS = {
     fontSize: "12px",
     lineHeight: "12px",
     marginTop: "4px",
@@ -341,7 +511,7 @@ function ViewExpense ({
     <div style={contStyle}>
       {excluded ? <p style={excludedTexStyle}>Excluded</p> : null}
       <span style={currencyStyle}>{currency}</span><span>{amount}</span>
-      <p style={timeStyle}>{formatTimestamp(exp.timestamp)}</p>
+      <p style={timeStyle}>{moment(exp.timestamp).format("DD/MM/YY HH:mm")}</p>
       <Description initialButtonStyle={descButtonStyle} initialShowText={!!desc} description={desc} onAddDescription={onAddDescription}/>
       {allowExclude ? <button style={excludeBtnStyle} onClick={onExcludeExpenseLocal}>{excludeText}</button> : null}
       {allowDelete ? <AreYouSure initialButtonStyle={deleteBtnStyle} initialButtonLabel={'Delete'} onYes={() => onDeleteExpense(exp.timestamp)} containerStyle={deleteContStyle}/> : null}
@@ -410,12 +580,25 @@ function SpendPeriod({
   );
 }
 
-const Toggle = ({onToggle, label, index, isActive}:{onToggle: () => void, label: string, index: number, isActive: boolean}) => {
-  const fromBottom = 24 * index;
+function Toggle({
+  onToggle,
+  label,
+  icon,
+  index,
+  isActive
+}:{
+  onToggle: () => void,
+  label?: string,
+  icon?: Icon,
+  index: number,
+  isActive: boolean
+}){
+  let fallback = '-';
+  const fromBottom = (24 + 40) * index;
   const background = isActive ? "rgba(255,215,0,0.95)" : "rgba(230,230,230,0.95)";
   const textColor = isActive ? "#333" : undefined;
 
-  const toggleStyle: Partial<CSSProperties> = {
+  const toggleStyle: CSS = {
     background,
     position: "fixed",
     bottom: fromBottom,
@@ -424,18 +607,22 @@ const Toggle = ({onToggle, label, index, isActive}:{onToggle: () => void, label:
     borderRadius: "50px",
     width: "48px",
     height: "48px",
-    marginBlock: "4px",
-    lineHeight: "48px",
     fontSize: "22px",
     fontWeight: "bolder",
     color: textColor,
     cursor: "pointer",
-    userSelect: "none"
+    userSelect: "none",
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    zIndex: 4,
   };
+
+  const iconSvg = icon ? ICONS[icon] : undefined;
 
   return (
     <div style={toggleStyle} onClick={onToggle}>
-      {label}
+      {label ?? iconSvg ?? fallback}
     </div>
   );
 }
@@ -448,18 +635,18 @@ function AreYouSure({
 }:{
   initialButtonLabel: string;
   onYes: () => void;
-  containerStyle?: Partial<CSSProperties>;
-  initialButtonStyle?: Partial<CSSProperties>;
+  containerStyle?: CSS;
+  initialButtonStyle?: CSS;
 })  {
   const [showAreYouSure, setShowAreYouSure] = useState(false);
 
   const onInitialClick = () => setShowAreYouSure(true);
 
-  const textStyle: Partial<CSSProperties> = {
+  const textStyle: CSS = {
     fontSize: "14px"
   };
 
-  const contStyle: Partial<CSSProperties> = containerStyle ?? {
+  const contStyle: CSS = containerStyle ?? {
     marginTop: "8px",
     marginBottom: "8px"
   };
@@ -480,14 +667,6 @@ function AreYouSure({
   );
 }
 
-const BOILERPLATE_PERIOD: SpendPeriod = {
-  expenses: [],
-  limit: DEFAULT_SETTINGS.limits['USD'],
-  currency: 'USD',
-  start: Date.now(),
-  total: 0,
-}
-
 function App() {
   const [spent, setSpent] = useState(0);
   const [periods, setPeriods] = useState<SpendPeriod[]>([]);
@@ -497,6 +676,7 @@ function App() {
   const [triedLoad, setTriedLoad] = useState(false);
   const [trySave, setTrySave] = useState(false);
   const [toggleConversion, setToggleConversion] = useState(false);
+  const [toggleStats, setToggleStats] = useState(false);
 
   const loadFromBrowser = (): SpendPeriod[] | undefined => {
     let periodsJson = localStorage.getItem('periods') ?? undefined;
@@ -687,10 +867,10 @@ function App() {
   /* Components */
 
   const OverUnder = () => {
-    const contStyle: Partial<CSSProperties> = {
+    const contStyle: CSS = {
       textAlign: "center"
     }
-    const spentStyle: Partial<CSSProperties> = {
+    const spentStyle: CSS = {
       fontSize: "16px",
       margin: "4px"
     };
@@ -707,20 +887,23 @@ function App() {
     if (toggleConversion) {
       limit = usd(limit, currentPeriod.currency);
       displaySpent = usd(displaySpent, currentPeriod.currency);
+      if (showAllExpensesSpent) {
+        allExpensesSpent = usd(displaySpent, currentPeriod.currency);
+      }
     }
     let color = displaySpent >= limit ? 'red' : 'green';
     color = displaySpent >= (limit * WARN_THRESHOLD) && displaySpent < limit ? 'orange' : color;
-    const spentNumberStyle: Partial<CSSProperties> = {
+    const spentNumberStyle: CSS = {
       color,
       fontSize: "28px",
       fontWeight: "bold",
     };
 
-    const limitNumberStyle: Partial<CSSProperties> = {
+    const limitNumberStyle: CSS = {
       fontSize: "36px",
     };
 
-    const overunderStyle: Partial<CSSProperties> = {
+    const overunderStyle: CSS = {
       color: color !== 'green' ? color : undefined,
       fontSize: "12px",
       margin: "6px"
@@ -744,18 +927,18 @@ function App() {
       currencyDisplay = 'USD';
     }
 
-    const allExpensesSpentContStyle: Partial<CSSProperties> = {
+    const allExpensesSpentContStyle: CSS = {
       margin: "0",
       fontSize: "8px",
       lineHeight: "10px",
     };
 
-    const allExpensesSpentNumberStyle: Partial<CSSProperties> = {
+    const allExpensesSpentNumberStyle: CSS = {
       fontSize: "10px",
       fontWeight: "bold",
     };
 
-    const allExpensesSpentCurrencyStyle: Partial<CSSProperties> = {
+    const allExpensesSpentCurrencyStyle: CSS = {
       fontSize: "8px"
     };
 
@@ -775,7 +958,7 @@ function App() {
   }
 
   const DataButtons = () => {
-    const btnStyle: Partial<CSSProperties> = {
+    const btnStyle: CSS = {
       marginInline: "6px"
     }
     return (
@@ -796,6 +979,15 @@ function App() {
     setTrySave(true);
   };
 
+  const onToggleStats = (val: boolean | null = null) => {
+    if (val === true || val === false) {
+      setToggleStats(val);
+    } else {
+      const newVal = !toggleStats;
+      setToggleStats(newVal);
+    }
+  };
+
   const format = "ddd D MMM, YYYY HH:mm";
   const start = moment(currentPeriod.start).format(format);
   const end = currentPeriod.end ? moment(currentPeriod.end).format(format) : 'now';
@@ -805,7 +997,7 @@ function App() {
     periodText = `${start} to ${moment(currentPeriod.end).format("HH:mm")}`;
   }
 
-  const periodTextStyle: Partial<CSSProperties> = {
+  const periodTextStyle: CSS = {
     display: "inline-block",
     fontSize: "14px",
     marginInline: "8px",
@@ -825,25 +1017,34 @@ function App() {
 
   const onActivePeriod = currentPeriodIndex == 0;
 
-  const containerStyle: Partial<CSSProperties> = {
-    marginBottom: "100px",
-  };
-
-  const newPeriodStyle: Partial<CSSProperties> = {
+  const newPeriodStyle: CSS = {
     marginTop: "16px",
     marginBottom: "8px"
   };
 
+  const containerStyle: CSS = {
+    marginBottom: "100px",
+    zIndex: 0,
+  };
+
   return (
-    <div style={containerStyle}>
-      <OverUnder/>
-      <NewExpense onAddExpense={onAddExpense} settings={settings}/>
-      <AreYouSure initialButtonLabel={'Start New Spend Period'} onYes={onEndPeriod} containerStyle={newPeriodStyle}/>
-      <PeriodChanger/>
-      {onActivePeriod ? <Settings initial={settings} onChangeSettings={onChangeSettings}/> : null}
-      <DataButtons/>
-      <Toggle onToggle={onToggleConversion} label={'$'} index={1} isActive={toggleConversion}/>
-    </div>
+    <>
+      <div style={containerStyle}>
+        <OverUnder/>
+        <NewExpense onAddExpense={onAddExpense} settings={settings}/>
+        <AreYouSure initialButtonLabel={'Start New Spend Period'} onYes={onEndPeriod} containerStyle={newPeriodStyle}/>
+        <PeriodChanger/>
+        {onActivePeriod ? <Settings initial={settings} onChangeSettings={onChangeSettings}/> : null}
+        <DataButtons/>
+      </div>
+      {toggleStats ?
+        <ModalContext onClickBackground={onToggleStats}>
+          <Stats periods={periods} settings={settings} onClose={() => onToggleStats(false)} toggleConversion={toggleConversion}/>
+        </ModalContext>
+        : null}
+      <Toggle onToggle={onToggleStats} icon={'stats'} index={2} isActive={toggleStats}/>
+      <Toggle onToggle={onToggleConversion} icon={'currencyConversion'} index={1} isActive={toggleConversion}/>
+    </>
   )
 }
 
