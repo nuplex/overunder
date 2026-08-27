@@ -594,7 +594,7 @@ function Toggle({
   isActive: boolean
 }){
   let fallback = '-';
-  const fromBottom = (24 + 40) * index;
+  const fromBottom = index == 1 ? 24 : (24 + 40) * index;
   const background = isActive ? "rgba(255,215,0,0.95)" : "rgba(230,230,230,0.95)";
   const textColor = isActive ? "#333" : undefined;
 
