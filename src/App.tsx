@@ -92,11 +92,17 @@ function usd(val: number, currency: Currency): number {
 //   return Number.parseFloat((val / USDCurrencyConversionMap[currency]).toFixed(2));
 // }
 
-type StatPage = 'compact';
+type StatPage = 'compact' | 'range';
 const StatPageTitleMap: Record<StatPage, string> = {
-  'compact': 'recent overunders'
-}
+  'compact': 'overunders at a glance',
+  'range' : 'selected overunders'
+};
+const PageIndexStatPageMap: Record<number, StatPage> = {
+  0: 'compact',
+  1: 'range'
+};
 
+// @ts-ignore
 function ModalContext({onClickBackground, children}:{onClickBackground: () => void, children: any}){
   const style: CSS = {
     background: "rgba(61,93,140,0.05)",
@@ -110,15 +116,211 @@ function ModalContext({onClickBackground, children}:{onClickBackground: () => vo
     zIndex: 2,
   };
 
+  // @ts-ignore
   const onClickBackgroundLocal = (e: any) => {
-    e.preventDefault();
-    e.stopPropagation();
-    onClickBackground();
+    // e.preventDefault();
+    // e.stopPropagation();
+    // onClickBackground();
   };
 
   return <div style={style} onClick={onClickBackgroundLocal}>{children}</div>
 }
 
+function CompactOverUnder({
+  period,
+  toggleConversion,
+}: {
+  period: SpendPeriod;
+  toggleConversion: boolean;
+}){
+  let limit = toggleConversion ? usd(period.limit, period.currency) : period.limit;
+  let total = toggleConversion ? usd(period.total, period.currency) : period.total;
+  let currency: Currency = toggleConversion ? 'USD' : period.currency;
+  let text = total > limit ? 'over' : 'under';
+  text = total === limit ? 'at' : text;
+  let color = total >= limit ? 'red' : 'green';
+  color = total >= (limit * WARN_THRESHOLD) && total < limit ? 'orange' : color;
+
+  const currencyStyle: CSS = {
+    fontSize: "10px",
+  };
+
+  const priceFont: CSS = {
+    fontSize: "16px",
+    fontWeight: "bold"
+  };
+
+  const totalStyle: CSS = {
+    color,
+    ...priceFont
+  };
+
+  const overunderStyle: CSS = {
+    color,
+    fontSize: "14px",
+  };
+
+  return (
+    <div key={period.start}>
+      <span style={currencyStyle}>{currency}</span>
+      <span style={totalStyle}>{total}</span>
+      <span style={overunderStyle}>&nbsp;{text}&nbsp;</span>
+      <span style={currencyStyle}>{currency}</span>
+      <span style={priceFont}>{limit}</span>
+    </div>
+  );
+}
+
+function StatValue({
+  label,
+  labelStyle,
+  value,
+  valueStyle,
+  containerStyle,
+  noValueMessage,
+}:{
+  label: string;
+  labelStyle?: CSS;
+  value: string | number | JSX.Element | null;
+  valueStyle?: CSS;
+  containerStyle?: CSS;
+  noValueMessage?: string;
+}) {
+  const defaultContainerStyle: CSS = {
+    fontSize: "12px"
+  };
+
+  const defaultValueStyle: CSS = {
+    fontSize: "13px",
+    fontWeight: "bold",
+  }
+
+  if (value === null) {
+    return (
+      <div style={containerStyle ?? defaultContainerStyle}>{noValueMessage ?? 'nothing to show'}</div>
+    );
+  }
+
+  return (
+    <div style={containerStyle ?? defaultContainerStyle}>
+      <span style={labelStyle}>{label}</span>
+      <span style={valueStyle ?? defaultValueStyle}>{value}</span>
+    </div>
+  );
+}
+
+function RangeStat({
+  periods,
+  settings,
+  toggleConversion,
+}: {
+  periods: SpendPeriod[];
+  settings: Settings;
+  toggleConversion: boolean;
+}) {
+  const [from, setFrom] = useState(moment(periods[periods.length - 1].start).format("YYYY-MM-DD HH:mm"));
+  const [to, setTo] = useState(moment().format("YYYY-MM-DD HH:mm"));
+
+  const onSetFrom = (e: any) => {
+    console.log(e.target.value);
+    setFrom(e.target.value);
+    e.stopPropagation();
+  };
+
+  const onSetTo = (e: any) => {
+    console.log(e.target.value);
+    setTo(e.target.value);
+    e.stopPropagation();
+  };
+
+  const periodsInRange = periods.filter((p) => {
+    const toM = moment(to);
+    const fromM = moment(from);
+    if (p.end) {
+      return moment(p.start).isSameOrAfter(fromM) && moment(p.end).isSameOrBefore(to);
+    }
+    return moment(p.start).isSameOrAfter(toM);
+  });
+
+  let totalOfPeriods: number | null = null;
+  let periodsIncluded = 0;
+  let lowestPeriodValue: number | null = Number.MAX_SAFE_INTEGER;
+  let lowestPeriod: SpendPeriod | null =  null;
+  let highestPeriodValue: number | null = Number.MIN_SAFE_INTEGER;
+  let highestPeriod: SpendPeriod | null = null;
+  if (periodsInRange.length > 0) {
+    totalOfPeriods = 0;
+    periodsInRange.forEach((p) => {
+      if (p.currency === settings.currency) {
+        totalOfPeriods! += p.total;
+        periodsIncluded++;
+
+        if (p.total > highestPeriodValue!) {
+          highestPeriodValue = p.total;
+          highestPeriod = p;
+        }
+
+        if (p.total < lowestPeriodValue!) {
+          lowestPeriodValue = p.total;
+          lowestPeriod = p;
+        }
+      }
+    });
+    totalOfPeriods =  totalOfPeriods === 0 ? null : totalOfPeriods
+    if (totalOfPeriods) {
+      totalOfPeriods = toggleConversion ? usd(totalOfPeriods, settings.currency) : totalOfPeriods;
+    }
+  }
+
+  let averageOfPeriods = null;
+  if (totalOfPeriods) {
+    averageOfPeriods = parseFloat((totalOfPeriods / periodsIncluded).toPrecision(2));
+    averageOfPeriods = toggleConversion ? usd(averageOfPeriods, settings.currency) : averageOfPeriods;
+  }
+
+  const labelStyle: CSS = {
+    fontSize: "12px",
+    display: "block",
+  };
+
+  return (
+    <div>
+      <label style={labelStyle}>
+        from&nbsp;
+        <input type={"datetime-local"} value={from} onChange={onSetFrom}/>
+      </label>
+      <label style={labelStyle}>
+        to&nbsp;
+        <input type={"datetime-local"} value={to} onChange={onSetTo}/>
+      </label>
+      {periodsInRange.length > 0 ?
+        periodsInRange.map((p) => <CompactOverUnder key={p.start} period={p} toggleConversion={toggleConversion}/>)
+        :
+        <div>no spend periods in range</div>
+      }
+      <StatValue label={`total of ${settings.currency} ${periodsIncluded} periods: `} value={totalOfPeriods} noValueMessage={`no periods have ${settings.currency} (change in settings)`}/>
+      <StatValue label={`average of ${settings.currency} ${periodsIncluded} periods: `} value={averageOfPeriods} noValueMessage={`cannot calculate average`}/>
+      <StatValue label={`highest spend: `} value={highestPeriod ? <CompactOverUnder period={highestPeriod} toggleConversion={toggleConversion}/> : null} noValueMessage={`cannot calculate highest spend`}/>
+      <StatValue label={`lowest spend: `} value={lowestPeriod ? <CompactOverUnder period={lowestPeriod} toggleConversion={toggleConversion}/> : null} noValueMessage={`cannot calculate lowest spend`}/>
+    </div>
+  )
+}
+
+// function CompactListStat({
+//   periods,
+//   toggleConversion,
+//   style
+// }:{
+//   periods: SpendPeriod[];
+//   toggleConversion: boolean;
+//   style: CSS;
+// }) {
+//   return (
+//     <div style={statsDisplayStyle}>
+//       {periods.map((p) => <CompactOverUnder period={p} toggleConversion={toggleConversion}/>)}
+//     </div>
+//   );
+// }
 
 function Stats({
   periods,
@@ -132,71 +334,42 @@ function Stats({
   toggleConversion: boolean;
 }) {
   // @ts-ignore
-  const [page, setPage] = useState<StatPage>('compact');
+  const [page, setPage] = useState<StatPage>('range');
+  const [pageIndex, setPageIndex] = useState(1);
+  //const [stateDisplay, setStatDisplay] = useState();
+
+  const maxLength = Object.entries(PageIndexStatPageMap).length;
+
+  const onBack = (e: any) => {
+    let newIdx = pageIndex - 1;
+    newIdx = newIdx < 0 ? 0 : newIdx;
+    setPageIndex(newIdx);
+    setPage(PageIndexStatPageMap[newIdx]);
+    e.stopPropagation();
+  };
+
+  const onNext = (e: any) => {
+    let newIdx = pageIndex + 1;
+    newIdx = newIdx >= maxLength ? maxLength - 1 : newIdx;
+    setPageIndex(newIdx);
+    setPage(PageIndexStatPageMap[newIdx]);
+    e.stopPropagation();
+  };
+
+  const statsDisplayStyle: CSS = {
+    maxHeight: "300px",
+    overflowY: "scroll",
+  };
 
   let statDisplay;
-
   if (page === 'compact') {
-    let totalLast7PeriodsOfSameCurrency = 0;
-    let sameCurrencyMatch = 1;
-    for (let i = 0; sameCurrencyMatch <= 7 && i < periods.length; i++) {
-      const period = periods[i];
-      if (period.currency === settings.currency) {
-        totalLast7PeriodsOfSameCurrency += period.total;
-      }
-    }
-
-    let last7PeriodsOfSameCurrencyText = totalLast7PeriodsOfSameCurrency > 0 ? `last 7 periods: ${settings.currency}${totalLast7PeriodsOfSameCurrency}` : `no periods have ${settings.currency} (change in settings)`;
-    if (toggleConversion) {
-      usd(totalLast7PeriodsOfSameCurrency, settings.currency);
-      last7PeriodsOfSameCurrencyText = totalLast7PeriodsOfSameCurrency > 0 ? `last 7 periods: USD${usd(totalLast7PeriodsOfSameCurrency, settings.currency)}` : last7PeriodsOfSameCurrencyText;
-    }
-
     statDisplay = (
-      <div>
-        {periods.map((p) => {
-          let limit = toggleConversion ? usd(p.limit, p.currency) : p.limit;
-          let total = toggleConversion ? usd(p.total, p.currency) : p.total;
-          let currency: Currency = toggleConversion ? 'USD' : p.currency;
-          let text = total > limit ? 'over' : 'under';
-          text = total === limit ? 'at' : text;
-          let color = total >= limit ? 'red' : 'green';
-          color = total >= (limit * WARN_THRESHOLD) && total < limit ? 'orange' : color;
-
-          const priceFont: CSS = {
-            fontSize: "16px",
-            fontWeight: "bold"
-          };
-
-          const totalStyle: CSS = {
-            color,
-            ...priceFont
-          };
-
-          const currencyStyle: CSS = {
-            fontSize: "10px",
-          };
-
-          const overunderStyle: CSS = {
-            color,
-            fontSize: "14px",
-          };
-
-          return (
-            <div key={p.start}>
-              <span style={currencyStyle}>{currency}</span>
-              <span style={totalStyle}>{total}</span>
-              <span style={overunderStyle}>&nbsp;{text}&nbsp;</span>
-              <span style={currencyStyle}>{currency}</span>
-              <span style={priceFont}>{limit}</span>
-            </div>
-          );
-        })}
-        <div>
-          {last7PeriodsOfSameCurrencyText}
-        </div>
+      <div style={statsDisplayStyle}>
+        {periods.map((p) => <CompactOverUnder period={p} toggleConversion={toggleConversion}/>)}
       </div>
     );
+  } else if (page === 'range') {
+    statDisplay = <RangeStat periods={periods} settings={settings} toggleConversion={toggleConversion}/>
   }
 
   const titleStyle: CSS = {
@@ -218,9 +391,11 @@ function Stats({
     border: "none",
     borderRadius: "3px",
     minWidth: "300px",
-    minHeight: "500px",
+    minHeight: "300px",
+    maxHeight: "400px",
     marginBlock: "3em",
     marginInline: "6em",
+    overflowY: "scroll",
     padding: "18px",
     position: "relative",
     zIndex: 3,
@@ -231,9 +406,9 @@ function Stats({
       <h4 style={titleStyle}>{StatPageTitleMap[page]}</h4>
       {statDisplay}
       <div style={buttonContStyle}>
-        {/*TODO previous stat button*/}
-        <button onClick={onClose}>Close</button>
-        {/*TODO next stat button*/}
+        <button onClick={onBack} disabled={pageIndex === 0}>{'<'}</button>&nbsp;
+        <button onClick={onClose}>Close</button>&nbsp;
+        <button onClick={onNext} disabled={pageIndex === maxLength - 1}>{'>'}</button>
       </div>
     </div>
   );
