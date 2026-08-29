@@ -213,12 +213,16 @@ function RangeStat({
   periods,
   settings,
   toggleConversion,
+  containerStyle,
 }: {
   periods: SpendPeriod[];
   settings: Settings;
   toggleConversion: boolean;
+  containerStyle?: CSS;
 }) {
-  const [from, setFrom] = useState(moment(periods[periods.length - 1].start).format("YYYY-MM-DD HH:mm"));
+  const [from, setFrom] = useState(
+    (periods.length > 0 ? moment(periods[periods.length - 1].start) : moment()).format("YYYY-MM-DD HH:mm")
+  );
   const [to, setTo] = useState(moment().format("YYYY-MM-DD HH:mm"));
 
   const onSetFrom = (e: any) => {
@@ -237,9 +241,9 @@ function RangeStat({
     const toM = moment(to);
     const fromM = moment(from);
     if (p.end) {
-      return moment(p.start).isSameOrAfter(fromM) && moment(p.end).isSameOrBefore(to);
+      return moment(p.start).isSameOrAfter(fromM) && moment(p.end).isSameOrBefore(toM);
     }
-    return moment(p.start).isSameOrAfter(toM);
+    return moment(p.start).isSameOrAfter(fromM);
   });
 
   let totalOfPeriods: number | null = null;
@@ -274,8 +278,8 @@ function RangeStat({
 
   let averageOfPeriods = null;
   if (totalOfPeriods) {
-    averageOfPeriods = parseFloat((totalOfPeriods / periodsIncluded).toPrecision(2));
-    averageOfPeriods = toggleConversion ? usd(averageOfPeriods, settings.currency) : averageOfPeriods;
+    averageOfPeriods = parseFloat((totalOfPeriods / periodsIncluded).toFixed(2));
+    // Don't need to toggleConversion as this is derived from totalOfPeriods which will already be converted.
   }
 
   const labelStyle: CSS = {
@@ -284,7 +288,7 @@ function RangeStat({
   };
 
   return (
-    <div>
+    <div style={containerStyle}>
       <label style={labelStyle}>
         from&nbsp;
         <input type={"datetime-local"} value={from} onChange={onSetFrom}/>
@@ -298,8 +302,8 @@ function RangeStat({
         :
         <div>no spend periods in range</div>
       }
-      <StatValue label={`total of ${settings.currency} ${periodsIncluded} periods: `} value={totalOfPeriods} noValueMessage={`no periods have ${settings.currency} (change in settings)`}/>
-      <StatValue label={`average of ${settings.currency} ${periodsIncluded} periods: `} value={averageOfPeriods} noValueMessage={`cannot calculate average`}/>
+      <StatValue label={`total of ${periodsIncluded} ${settings.currency} periods: `} value={totalOfPeriods} noValueMessage={`no periods have ${settings.currency} (change in settings)`}/>
+      <StatValue label={`average of ${periodsIncluded} ${settings.currency}  periods: `} value={averageOfPeriods} noValueMessage={`cannot calculate average`}/>
       <StatValue label={`highest spend: `} value={highestPeriod ? <CompactOverUnder period={highestPeriod} toggleConversion={toggleConversion}/> : null} noValueMessage={`cannot calculate highest spend`}/>
       <StatValue label={`lowest spend: `} value={lowestPeriod ? <CompactOverUnder period={lowestPeriod} toggleConversion={toggleConversion}/> : null} noValueMessage={`cannot calculate lowest spend`}/>
     </div>
@@ -334,8 +338,8 @@ function Stats({
   toggleConversion: boolean;
 }) {
   // @ts-ignore
-  const [page, setPage] = useState<StatPage>('range');
-  const [pageIndex, setPageIndex] = useState(1);
+  const [page, setPage] = useState<StatPage>('compact');
+  const [pageIndex, setPageIndex] = useState(0);
   //const [stateDisplay, setStatDisplay] = useState();
 
   const maxLength = Object.entries(PageIndexStatPageMap).length;
@@ -357,7 +361,7 @@ function Stats({
   };
 
   const statsDisplayStyle: CSS = {
-    maxHeight: "300px",
+    maxHeight: "350px",
     overflowY: "scroll",
   };
 
@@ -369,7 +373,7 @@ function Stats({
       </div>
     );
   } else if (page === 'range') {
-    statDisplay = <RangeStat periods={periods} settings={settings} toggleConversion={toggleConversion}/>
+    statDisplay = <RangeStat periods={periods} settings={settings} toggleConversion={toggleConversion} containerStyle={statsDisplayStyle}/>
   }
 
   const titleStyle: CSS = {
@@ -391,11 +395,10 @@ function Stats({
     border: "none",
     borderRadius: "3px",
     minWidth: "300px",
-    minHeight: "300px",
-    maxHeight: "400px",
+    minHeight: "425px",
+    maxHeight: "425px",
     marginBlock: "3em",
     marginInline: "6em",
-    overflowY: "scroll",
     padding: "18px",
     position: "relative",
     zIndex: 3,
