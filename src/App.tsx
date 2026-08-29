@@ -243,7 +243,7 @@ function RangeStat({
     if (p.end) {
       return moment(p.start).isSameOrAfter(fromM) && moment(p.end).isSameOrBefore(toM);
     }
-    return moment(p.start).isSameOrAfter(fromM);
+    return moment(p.start).isSameOrAfter(fromM) && moment().isSameOrBefore(toM);
   });
 
   let totalOfPeriods: number | null = null;
