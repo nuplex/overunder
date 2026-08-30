@@ -69,6 +69,11 @@ const DEFAULT_SETTINGS: Settings = {
   }
 };
 
+type SerializedData = {
+  periods: SpendPeriod[];
+  settings: Settings;
+};
+
 const BOILERPLATE_PERIOD: SpendPeriod = {
   expenses: [],
   limit: DEFAULT_SETTINGS.limits['USD'],
@@ -856,6 +861,8 @@ function App() {
   const [toggleConversion, setToggleConversion] = useState(false);
   const [toggleStats, setToggleStats] = useState(false);
 
+  /* serialization functions */
+
   const loadFromBrowser = (): SpendPeriod[] | undefined => {
     let periodsJson = localStorage.getItem('periods') ?? undefined;
     let settingsJson = localStorage.getItem('settings') ?? undefined;
@@ -909,6 +916,41 @@ function App() {
     saveToBrowser();
     setTrySave(false);
   }
+
+  const exportData = () => {
+    const data: SerializedData = {
+      periods,
+      settings,
+    };
+    const serializedJson = JSON.stringify(data);
+
+    const now = new Date(Date.now());
+    const time = `${now.getDate()}${now.getMonth()}${now.getFullYear()}-${now.getHours()}${now.getMinutes()}${now.getSeconds()}`;
+    const filename = `overunder_${time}.json`;
+    const file = new Blob([serializedJson], {
+      type: "application/json",
+    });
+
+    const blobUrl = URL.createObjectURL(file);
+    const anchor = document.createElement('a');
+    anchor.download = filename;
+    anchor.href = blobUrl;
+    anchor.style.display = 'none';
+
+    try {
+      // Append the anchor, click it, and clean up
+      document.body.appendChild(anchor);
+      anchor.click();
+    } catch {
+      alert('Something went wrong with exporting data.');
+    } finally {
+      // Remove the anchor and revoke the object URL
+      document.body.removeChild(anchor);
+      URL.revokeObjectURL(blobUrl);
+    }
+  }
+
+  /* state functions */
 
   const onChangeSettings = (newSettings: Settings) => {
     setSettings(newSettings);
@@ -1140,10 +1182,15 @@ function App() {
       marginInline: "6px"
     }
     return (
-      <div>
-        <button style={btnStyle} onClick={saveToBrowser}>Force Save</button>
-        <button style={btnStyle} onClick={loadFromBrowser}>Load Again</button>
-      </div>
+      <>
+        <div>
+          <button style={btnStyle} onClick={saveToBrowser}>Force Save</button>
+          <button style={btnStyle} onClick={loadFromBrowser}>Load Again</button>
+        </div>
+        <div>
+          <button style={btnStyle} onClick={exportData}>Export</button>
+        </div>
+      </>
     )
   };
 
