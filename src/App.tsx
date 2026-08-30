@@ -361,7 +361,7 @@ function Stats({
   };
 
   const statsDisplayStyle: CSS = {
-    maxHeight: "350px",
+    maxHeight: "400px",
     overflowY: "scroll",
   };
 
@@ -395,8 +395,8 @@ function Stats({
     border: "none",
     borderRadius: "3px",
     minWidth: "300px",
-    minHeight: "425px",
-    maxHeight: "425px",
+    minHeight: "475px",
+    maxHeight: "475px",
     marginBlock: "3em",
     marginInline: "6em",
     padding: "18px",
