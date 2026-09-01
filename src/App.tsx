@@ -1108,7 +1108,7 @@ function App() {
       limit = usd(limit, currentPeriod.currency);
       displaySpent = usd(displaySpent, currentPeriod.currency);
       if (showAllExpensesSpent) {
-        allExpensesSpent = usd(displaySpent, currentPeriod.currency);
+        allExpensesSpent = usd(allExpensesSpent, currentPeriod.currency);
       }
     }
     let color = displaySpent >= limit ? 'red' : 'green';
