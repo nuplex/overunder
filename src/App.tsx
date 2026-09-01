@@ -97,14 +97,49 @@ function usd(val: number, currency: Currency): number {
 //   return Number.parseFloat((val / USDCurrencyConversionMap[currency]).toFixed(2));
 // }
 
-type StatPage = 'compact' | 'range';
+function getConsecutiveCurrencyPeriods(periods: SpendPeriod[], currency: Currency) {
+  const newPeriods: SpendPeriod[] = [];
+  let isSame = true;
+  let i = 0;
+  while (isSame && i < periods.length) {
+    const period = periods[i];
+    if (period.currency !== currency) {
+      isSame = false;
+    } else {
+      newPeriods.push(period);
+    }
+    i++;
+  }
+
+  return newPeriods;
+}
+
+function usdAll(periods: SpendPeriod[]) {
+  const newPeriods: SpendPeriod[] = [];
+  let i = 0;
+  while (i < periods.length) {
+    const newPeriod = {...periods[i]}; // prevent editing actual period.
+    newPeriod.total = usd(newPeriod.total, newPeriod.currency);
+    newPeriod.limit = usd(newPeriod.limit, newPeriod.currency);
+    newPeriod.currency = 'USD';
+    newPeriods.push(newPeriod);
+    i++;
+  }
+
+  return newPeriods;
+}
+
+
+type StatPage = 'compact' | 'range' | 'rangeUSD';
 const StatPageTitleMap: Record<StatPage, string> = {
   'compact': 'overunders at a glance',
-  'range' : 'selected overunders'
+  'range' : 'selected overunders',
+  'rangeUSD': 'everything USD'
 };
 const PageIndexStatPageMap: Record<number, StatPage> = {
   0: 'compact',
-  1: 'range'
+  1: 'range',
+  2: 'rangeUSD'
 };
 
 // @ts-ignore
@@ -216,12 +251,12 @@ function StatValue({
 
 function RangeStat({
   periods,
-  settings,
+  currency,
   toggleConversion,
   containerStyle,
 }: {
   periods: SpendPeriod[];
-  settings: Settings;
+  currency: Currency;
   toggleConversion: boolean;
   containerStyle?: CSS;
 }) {
@@ -231,13 +266,11 @@ function RangeStat({
   const [to, setTo] = useState(moment().format("YYYY-MM-DD HH:mm"));
 
   const onSetFrom = (e: any) => {
-    console.log(e.target.value);
     setFrom(e.target.value);
     e.stopPropagation();
   };
 
   const onSetTo = (e: any) => {
-    console.log(e.target.value);
     setTo(e.target.value);
     e.stopPropagation();
   };
@@ -260,7 +293,7 @@ function RangeStat({
   if (periodsInRange.length > 0) {
     totalOfPeriods = 0;
     periodsInRange.forEach((p) => {
-      if (p.currency === settings.currency) {
+      if (p.currency === currency) {
         totalOfPeriods! += p.total;
         periodsIncluded++;
 
@@ -277,7 +310,7 @@ function RangeStat({
     });
     totalOfPeriods =  totalOfPeriods === 0 ? null : totalOfPeriods
     if (totalOfPeriods) {
-      totalOfPeriods = toggleConversion ? usd(totalOfPeriods, settings.currency) : totalOfPeriods;
+      totalOfPeriods = toggleConversion ? usd(totalOfPeriods, currency) : totalOfPeriods;
     }
   }
 
@@ -302,15 +335,16 @@ function RangeStat({
         to&nbsp;
         <input type={"datetime-local"} value={to} onChange={onSetTo}/>
       </label>
+      <StatValue label={`total of ${periodsIncluded} ${currency} periods: `} value={totalOfPeriods} noValueMessage={`no periods have ${currency} (change in settings)`}/>
+      <StatValue label={`average of ${periodsIncluded} ${currency}  periods: `} value={averageOfPeriods} noValueMessage={`cannot calculate average`}/>
+      <StatValue label={`highest spend: `} value={highestPeriod ? <CompactOverUnder period={highestPeriod} toggleConversion={toggleConversion}/> : null} noValueMessage={`cannot calculate highest spend`}/>
+      <StatValue label={`lowest spend: `} value={lowestPeriod ? <CompactOverUnder period={lowestPeriod} toggleConversion={toggleConversion}/> : null} noValueMessage={`cannot calculate lowest spend`}/>
+      <hr/>
       {periodsInRange.length > 0 ?
         periodsInRange.map((p) => <CompactOverUnder key={p.start} period={p} toggleConversion={toggleConversion}/>)
         :
         <div>no spend periods in range</div>
       }
-      <StatValue label={`total of ${periodsIncluded} ${settings.currency} periods: `} value={totalOfPeriods} noValueMessage={`no periods have ${settings.currency} (change in settings)`}/>
-      <StatValue label={`average of ${periodsIncluded} ${settings.currency}  periods: `} value={averageOfPeriods} noValueMessage={`cannot calculate average`}/>
-      <StatValue label={`highest spend: `} value={highestPeriod ? <CompactOverUnder period={highestPeriod} toggleConversion={toggleConversion}/> : null} noValueMessage={`cannot calculate highest spend`}/>
-      <StatValue label={`lowest spend: `} value={lowestPeriod ? <CompactOverUnder period={lowestPeriod} toggleConversion={toggleConversion}/> : null} noValueMessage={`cannot calculate lowest spend`}/>
     </div>
   )
 }
@@ -345,7 +379,7 @@ function Stats({
   // @ts-ignore
   const [page, setPage] = useState<StatPage>('compact');
   const [pageIndex, setPageIndex] = useState(0);
-  //const [stateDisplay, setStatDisplay] = useState();
+  const [consecutiveOnly, setConsecutiveOnly] = useState(true);
 
   const maxLength = Object.entries(PageIndexStatPageMap).length;
 
@@ -365,20 +399,28 @@ function Stats({
     e.stopPropagation();
   };
 
+  const onConsecutiveOnly = () => {
+    setConsecutiveOnly(!consecutiveOnly);
+  };
+
   const statsDisplayStyle: CSS = {
     maxHeight: "400px",
     overflowY: "scroll",
   };
 
   let statDisplay;
+  let periodsToUse = consecutiveOnly ? getConsecutiveCurrencyPeriods(periods, settings.currency) : periods;
   if (page === 'compact') {
     statDisplay = (
       <div style={statsDisplayStyle}>
-        {periods.map((p) => <CompactOverUnder period={p} toggleConversion={toggleConversion}/>)}
+        {periodsToUse.map((p) => <CompactOverUnder key={`cou${p.start}`} period={p} toggleConversion={toggleConversion}/>)}
       </div>
     );
   } else if (page === 'range') {
-    statDisplay = <RangeStat periods={periods} settings={settings} toggleConversion={toggleConversion} containerStyle={statsDisplayStyle}/>
+    statDisplay = <RangeStat key={'range'} periods={periodsToUse} currency={settings.currency} toggleConversion={toggleConversion} containerStyle={statsDisplayStyle}/>
+  } else if (page === 'rangeUSD') {
+    const periodsInUSD = usdAll(periods);
+    statDisplay = <RangeStat key={'rangeUSD'} periods={periodsInUSD} currency={'USD'} toggleConversion={toggleConversion} containerStyle={statsDisplayStyle}/>
   }
 
   const titleStyle: CSS = {
@@ -393,6 +435,7 @@ function Stats({
     position: "absolute",
     display: "flex",
     justifyContent: "center",
+    flexDirection: "column"
   };
 
   const styleStatsContainer: CSS = {
@@ -400,13 +443,17 @@ function Stats({
     border: "none",
     borderRadius: "3px",
     minWidth: "300px",
-    minHeight: "475px",
-    maxHeight: "475px",
+    minHeight: "500px",
+    maxHeight: "500px",
     marginBlock: "3em",
     marginInline: "6em",
     padding: "18px",
     position: "relative",
     zIndex: 3,
+  };
+
+  const checkboxStyle: CSS = {
+    fontSize: "11px",
   };
   
   return (
@@ -414,9 +461,17 @@ function Stats({
       <h4 style={titleStyle}>{StatPageTitleMap[page]}</h4>
       {statDisplay}
       <div style={buttonContStyle}>
-        <button onClick={onBack} disabled={pageIndex === 0}>{'<'}</button>&nbsp;
-        <button onClick={onClose}>Close</button>&nbsp;
-        <button onClick={onNext} disabled={pageIndex === maxLength - 1}>{'>'}</button>
+        <div>
+          <button onClick={onBack} disabled={pageIndex === 0}>{'<'}</button>&nbsp;
+          <button onClick={onClose}>Close</button>&nbsp;
+          <button onClick={onNext} disabled={pageIndex === maxLength - 1}>{'>'}</button>
+        </div>
+        {page !== 'rangeUSD' ? <div style={checkboxStyle}>
+          <label>
+            <input type="checkbox" onChange={onConsecutiveOnly} checked={consecutiveOnly}/>
+            same-currency period group
+          </label>
+        </div> : null}
       </div>
     </div>
   );
