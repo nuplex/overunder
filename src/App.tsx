@@ -31,12 +31,24 @@ const USDCurrencyConversionMap: Record<Currency, number> = {
   USD: 1
 };
 
+const TAGS = ['red', 'orange', 'gold', 'green', 'blue', 'purple'];
+type Tag = typeof TAGS[number];
+const TagColorMap: Record<Tag, string> = {
+  red: '#C80428',
+  orange: '#FB6107',
+  gold: '#E0BF00',
+  green: '#7AC74F',
+  blue: '#2D7DD2',
+  purple: '#5E0462',
+};
+
 type Expense = {
   currency: Currency;
   amount: number;
   timestamp: number;
   description?: string;
   excluded?: boolean;
+  tag?: Tag;
 };
 
 type SpendPeriod = {
@@ -96,6 +108,25 @@ function usd(val: number, currency: Currency): number {
 //   }
 //   return Number.parseFloat((val / USDCurrencyConversionMap[currency]).toFixed(2));
 // }
+
+/* @ts-ignore */
+function getConsecutiveCurrencyPeriodGroups(periods: SpendPeriod[], currency: Currency) {
+  const periodGroups: SpendPeriod[][] = [];
+  let grouped: SpendPeriod[] = [];
+  let i = 0;
+  while (i < periods.length) {
+    const period = periods[i];
+    if (period.currency !== currency) {
+      periodGroups.push(grouped);
+      grouped = [];
+    } else {
+      grouped.push(period);
+    }
+    i++;
+  }
+
+  return periodGroups;
+}
 
 function getConsecutiveCurrencyPeriods(periods: SpendPeriod[], currency: Currency) {
   const newPeriods: SpendPeriod[] = [];
@@ -557,6 +588,27 @@ function Settings({
   )
 }
 
+function Tag({tag}: {tag: Tag | null}) {
+  if (tag === null) {
+    return null;
+  }
+
+  const tagStyle: CSS = {
+    background: TagColorMap[tag],
+    display: "inline-block",
+    height: "14px",
+    width: "14px",
+    border:" none",
+    borderRadius: "14px",
+    marginLeft: "4px",
+  };
+
+  // TODO add react tooltip to show tag name?
+  return (
+    <div style={tagStyle}/>
+  )
+}
+
 function NewExpense({
   onAddExpense,
   settings
@@ -653,6 +705,10 @@ function Description({
   }
 
   const onAdd = () => {
+    let toAdd = text?.trim() ?? '';
+    if (toAdd === '') {
+      return;
+    }
     onAddDescription(text);
     setEditing(false);
   }
@@ -688,6 +744,8 @@ function ViewExpense ({
 })  {
   const [desc, setDesc] = useState(exp.description);
   const [excluded, setExcluded] = useState(exp.excluded);
+  const [tag, setTag] = useState<Tag | null>(exp.tag ?? null);
+  const [tagIndex, setTagIndex] = useState<number | null>(exp.tag ? TAGS.indexOf(exp.tag) : null);
 
   const onAddDescription = (text: string) => {
     if (text !== undefined) {
@@ -701,7 +759,30 @@ function ViewExpense ({
     exp.excluded = !exp.excluded;
     onExcludeExpense();
     setExcluded(true);
-  }
+  };
+
+  const onChangeTag = () => {
+    let newTag;
+    if (tagIndex === null) {
+      setTagIndex(0);
+      newTag = TAGS[0];
+      setTag(TAGS[0]);
+    } else {
+      let newIdx = tagIndex + 1;
+      if (newIdx >= TAGS.length) {
+        // cycled back to default
+        setTagIndex(null);
+        setTag(null);
+        newTag = undefined;
+      } else {
+        setTagIndex(newIdx);
+        setTag(TAGS[newIdx]);
+        newTag = TAGS[newIdx];
+      }
+    }
+    exp.tag = newTag;
+    setTrySave(true);
+  };
 
   // TODO for decimal currencies, do toFixed(2) on them
   const amount = conversionToggled ? usd(exp.amount, exp.currency) : exp.amount;
@@ -745,10 +826,15 @@ function ViewExpense ({
     marginTop: "4px",
   };
 
+  const tagOverrideStyle: CSS | undefined = tag ? {
+    color: TagColorMap[tag],
+    userSelect: "none",
+  } : undefined;
+
   return (
     <div style={contStyle}>
       {excluded ? <p style={excludedTexStyle}>Excluded</p> : null}
-      <span style={currencyStyle}>{currency}</span><span>{amount}</span>
+      <span onClick={onChangeTag} style={tagOverrideStyle}><span style={currencyStyle}>{currency}</span><span>{amount}</span><Tag tag={tag}/></span>
       <p style={timeStyle}>{moment(exp.timestamp).format("DD/MM/YY HH:mm")}</p>
       <Description initialButtonStyle={descButtonStyle} initialShowText={!!desc} description={desc} onAddDescription={onAddDescription}/>
       {allowExclude ? <button style={excludeBtnStyle} onClick={onExcludeExpenseLocal}>{excludeText}</button> : null}
