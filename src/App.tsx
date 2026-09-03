@@ -43,6 +43,16 @@ const TagColorMap: Record<Tag, string> = {
   purple: '#5E0462',
 };
 
+const EMPTY_TAG_NAMES:  Record<Tag, string> = {
+  brown: '',
+  red: '',
+  orange: '',
+  gold: '',
+  green: '',
+  blue: '',
+  purple: '',
+};
+
 type Expense = {
   currency: Currency;
   amount: number;
@@ -434,16 +444,6 @@ function StatValue({
   );
 }
 
-const EMPTY_TAG_NAMES:  Record<Tag, string> = {
-  brown: '',
-  red: '',
-  orange: '',
-  gold: '',
-  green: '',
-  blue: '',
-  purple: '',
-};
-
 function TagNamer({
   settings,
   onClickTag,
@@ -813,9 +813,9 @@ function Stats({
     border: "none",
     borderRadius: "3px",
     minWidth: "300px",
-    minHeight: "500px",
-    maxHeight: "500px",
-    marginBlock: "3em",
+    minHeight: "525px",
+    maxHeight: "525px",
+    marginBlock: "2em",
     marginInline: "6em",
     padding: "18px",
     position: "relative",
