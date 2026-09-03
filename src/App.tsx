@@ -312,9 +312,13 @@ function CompactExpense({
 function CompactOverUnder({
   period,
   toggleConversion,
+  showDate,
+  onClickOverUnder,
 }: {
   period: SpendPeriod;
   toggleConversion: boolean;
+  showDate?: boolean;
+  onClickOverUnder?: (period: SpendPeriod) => void;
 }){
   let limit = toggleConversion ? usd(period.limit, period.currency) : period.limit;
   let total = toggleConversion ? usd(period.total, period.currency) : period.total;
@@ -323,6 +327,12 @@ function CompactOverUnder({
   text = total === limit ? 'at' : text;
   let color = total >= limit ? 'red' : 'green';
   color = total >= (limit * WARN_THRESHOLD) && total < limit ? 'orange' : color;
+
+  const localOnClickOverUnder = () => {
+    if (onClickOverUnder) {
+      onClickOverUnder(period);
+    }
+  };
 
   const currencyStyle: CSS = {
     fontSize: "10px",
@@ -343,8 +353,35 @@ function CompactOverUnder({
     fontSize: "14px",
   };
 
+  let date;
+  if (showDate) {
+    const startM = moment(period.start);
+    const endM = period.end ? moment(period.end) : moment();
+    if (period.end) {
+      if (startM.isSame(endM, 'day')) {
+        date = `${startM.format('M/D')}`;
+      } else {
+        date = `${startM.format('M/D')} - ${endM.format('M/D')}`;
+      }
+    } else {
+        date = `${startM.format('M/D')} - now`;
+    }
+  }
+
+  const dateStyle: CSS = {
+    fontSize: "10px",
+    height: "10px",
+    margin: 0,
+    marginBottom: "1px",
+  };
+
+  const containerStyle: CSS = {
+    cursor: onClickOverUnder ? 'pointer' : undefined
+  };
+
   return (
-    <div key={period.start}>
+    <div style={containerStyle} key={period.start} onClick={localOnClickOverUnder}>
+      {showDate ? <div style={dateStyle}>{date}</div> : null}
       <span style={currencyStyle}>{currency}</span>
       <span style={totalStyle}>{total}</span>
       <span style={overunderStyle}>&nbsp;{text}&nbsp;</span>
@@ -681,18 +718,21 @@ function Stats({
   settings,
   onClose,
   onTrySave,
+  onClickOverUnder,
   toggleConversion,
 }: {
   periods: SpendPeriod[];
   settings: Settings;
   onClose: () => void;
   onTrySave: () => void;
+  onClickOverUnder: (period: SpendPeriod) => void;
   toggleConversion: boolean;
 }) {
   // @ts-ignore
   const [page, setPage] = useState<StatPage>('compact');
   const [pageIndex, setPageIndex] = useState(0);
   const [consecutiveOnly, setConsecutiveOnly] = useState(true);
+  const [showDates, setShowDates] = useState(false);
 
   const maxLength = Object.entries(PageIndexStatPageMap).length;
 
@@ -716,6 +756,10 @@ function Stats({
     setConsecutiveOnly(!consecutiveOnly);
   };
 
+  const onShowDates = () => {
+    setShowDates(!showDates);
+  };
+
   const statsDisplayStyle: CSS = {
     maxHeight: "400px",
     overflowY: "scroll",
@@ -726,7 +770,15 @@ function Stats({
   if (page === 'compact') {
     statDisplay = (
       <div style={statsDisplayStyle}>
-        {periodsToUse.map((p) => <CompactOverUnder key={`cou${p.start}`} period={p} toggleConversion={toggleConversion}/>)}
+        {periodsToUse.map((p) =>
+          <CompactOverUnder
+            key={`cou${p.start}`}
+            period={p}
+            toggleConversion={toggleConversion}
+            showDate={showDates}
+            onClickOverUnder={onClickOverUnder}
+          />
+        )}
       </div>
     );
   } else if (page === 'range') {
@@ -784,12 +836,20 @@ function Stats({
           <button onClick={onClose}>Close</button>&nbsp;
           <button onClick={onNext} disabled={pageIndex === maxLength - 1}>{'>'}</button>
         </div>
-        {page !== 'rangeUSD' ? <div style={checkboxStyle}>
-          <label>
-            <input type="checkbox" onChange={onConsecutiveOnly} checked={consecutiveOnly}/>
-            same-currency period group
-          </label>
-        </div> : null}
+        {page !== 'rangeUSD' ?
+          <div style={checkboxStyle}>
+            <label>
+              <input type="checkbox" onChange={onConsecutiveOnly} checked={consecutiveOnly}/>
+              same-currency period group
+            </label>
+          </div> : null}
+        {page === 'compact' ?
+          <div style={checkboxStyle}>
+            <label>
+              <input type="checkbox" onChange={onShowDates} checked={showDates}/>
+              show dates
+            </label>
+          </div> : null}
       </div>
     </div>
   );
@@ -1521,6 +1581,43 @@ function App() {
     setToggleConversion(!toggleConversion);
   };
 
+  const onAddPeriodName = (name: string) => {
+    currentPeriod.name = name;
+    const newPeriod = {...currentPeriod, name};
+    const newPeriods = [...periods];
+    newPeriods[currentPeriodIndex] = newPeriod;
+    setCurrentPeriod(newPeriod);
+    setPeriods(newPeriods);
+    setTrySave(true);
+  };
+
+  const onToggleStats = (val: boolean | null = null) => {
+    if (val === true || val === false) {
+      setToggleStats(val);
+    } else {
+      const newVal = !toggleStats;
+      setToggleStats(newVal);
+    }
+  };
+
+  const onClickedOverUnderInStats = (period: SpendPeriod) => {
+    const index = periods.indexOf(period);
+    setCurrentPeriod(period);
+    setCurrentPeriodIndex(index);
+    setSpent(period.total);
+    setToggleStats(false);
+  };
+
+  const goToCurrent = () => {
+    if (currentPeriodIndex > 1) {
+      const newIdx = 0;
+      const newPeriod: SpendPeriod = periods[newIdx];
+      setSpent(newPeriod.total);
+      setCurrentPeriodIndex(newIdx);
+      setCurrentPeriod(newPeriod);
+    }
+  };
+
   const previous = () => {
     if (currentPeriodIndex > 0) {
       const newIdx = currentPeriodIndex - 1;
@@ -1671,25 +1768,6 @@ function App() {
     )
   };
 
-  const onAddPeriodName = (name: string) => {
-    currentPeriod.name = name;
-    const newPeriod = {...currentPeriod, name};
-    const newPeriods = [...periods];
-    newPeriods[currentPeriodIndex] = newPeriod;
-    setCurrentPeriod(newPeriod);
-    setPeriods(newPeriods);
-    setTrySave(true);
-  };
-
-  const onToggleStats = (val: boolean | null = null) => {
-    if (val === true || val === false) {
-      setToggleStats(val);
-    } else {
-      const newVal = !toggleStats;
-      setToggleStats(newVal);
-    }
-  };
-
   const format = "ddd D MMM, YYYY HH:mm";
   const start = moment(currentPeriod.start).format(format);
   const end = currentPeriod.end ? moment(currentPeriod.end).format(format) : 'now';
@@ -1708,6 +1786,7 @@ function App() {
   const PeriodChanger = () => (
     <div>
       <div>
+        {currentPeriodIndex > 1 ? <button onClick={goToCurrent}>{`<<`}</button> : null}
         <button onClick={previous} disabled={currentPeriodIndex === 0}>{`<`}</button>
         <div style={periodTextStyle}>{periodText}</div>
         <button onClick={next} disabled={currentPeriodIndex === periods.length - 1}>{`>`}</button>
@@ -1741,7 +1820,14 @@ function App() {
       </div>
       {toggleStats ?
         <ModalContext onClickBackground={onToggleStats}>
-          <Stats periods={periods} settings={settings} onClose={() => onToggleStats(false)} toggleConversion={toggleConversion} onTrySave={onTrySave}/>
+          <Stats
+            periods={periods}
+            settings={settings}
+            onClose={() => onToggleStats(false)}
+            toggleConversion={toggleConversion}
+            onTrySave={onTrySave}
+            onClickOverUnder={onClickedOverUnderInStats}
+          />
         </ModalContext>
         : null}
       <Toggle onToggle={onToggleStats} icon={'stats'} index={2} isActive={toggleStats}/>
