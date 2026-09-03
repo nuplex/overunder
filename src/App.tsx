@@ -31,12 +31,13 @@ const USDCurrencyConversionMap: Record<Currency, number> = {
   USD: 1
 };
 
-const TAGS = ['red', 'orange', 'gold', 'green', 'blue', 'purple'];
+const TAGS = ['brown', 'red', 'orange', 'gold', 'green', 'blue', 'purple'];
 type Tag = typeof TAGS[number];
 const TagColorMap: Record<Tag, string> = {
+  brown: '#765B2E',
   red: '#C80428',
   orange: '#FB6107',
-  gold: '#E0BF00',
+  gold: '#F7C204',
   green: '#7AC74F',
   blue: '#2D7DD2',
   purple: '#5E0462',
@@ -67,6 +68,7 @@ type LimitsSettings = Record<Currency, number>;
 type Settings = {
   currency: Currency;
   limits: LimitsSettings;
+  tagsNames?: Record<Tag, string>;
 };
 
 const DEFAULT_SETTINGS: Settings = {
@@ -109,6 +111,29 @@ function usd(val: number, currency: Currency): number {
 //   return Number.parseFloat((val / USDCurrencyConversionMap[currency]).toFixed(2));
 // }
 
+function usdAll(periods: SpendPeriod[]) {
+  const newPeriods: SpendPeriod[] = [];
+  let i = 0;
+  while (i < periods.length) {
+    const newPeriod = {...periods[i]}; // prevent editing actual period.
+    newPeriod.total = usd(newPeriod.total, newPeriod.currency);
+    newPeriod.limit = usd(newPeriod.limit, newPeriod.currency);
+    newPeriod.currency = 'USD';
+    newPeriods.push(newPeriod);
+    i++;
+  }
+
+  return newPeriods;
+}
+
+function getExpensesFromPeriods(periods: SpendPeriod[]) {
+  const expenses: Expense[] = [];
+  periods.forEach((p) => {
+    expenses.push(...p.expenses);
+  });
+  return expenses;
+}
+
 /* @ts-ignore */
 function getConsecutiveCurrencyPeriodGroups(periods: SpendPeriod[], currency: Currency) {
   const periodGroups: SpendPeriod[][] = [];
@@ -145,32 +170,18 @@ function getConsecutiveCurrencyPeriods(periods: SpendPeriod[], currency: Currenc
   return newPeriods;
 }
 
-function usdAll(periods: SpendPeriod[]) {
-  const newPeriods: SpendPeriod[] = [];
-  let i = 0;
-  while (i < periods.length) {
-    const newPeriod = {...periods[i]}; // prevent editing actual period.
-    newPeriod.total = usd(newPeriod.total, newPeriod.currency);
-    newPeriod.limit = usd(newPeriod.limit, newPeriod.currency);
-    newPeriod.currency = 'USD';
-    newPeriods.push(newPeriod);
-    i++;
-  }
-
-  return newPeriods;
-}
-
-
-type StatPage = 'compact' | 'range' | 'rangeUSD';
+type StatPage = 'compact' | 'range' | 'rangeUSD' | 'tagView';
 const StatPageTitleMap: Record<StatPage, string> = {
   'compact': 'overunders at a glance',
   'range' : 'selected overunders',
-  'rangeUSD': 'everything USD'
+  'rangeUSD': 'everything USD',
+  'tagView': 'tags!'
 };
 const PageIndexStatPageMap: Record<number, StatPage> = {
   0: 'compact',
   1: 'range',
-  2: 'rangeUSD'
+  2: 'rangeUSD',
+  3: 'tagView',
 };
 
 // @ts-ignore
@@ -195,6 +206,72 @@ function ModalContext({onClickBackground, children}:{onClickBackground: () => vo
   };
 
   return <div style={style} onClick={onClickBackgroundLocal}>{children}</div>
+}
+
+function CompactExpense ({
+  exp,
+  toggleConversion,
+}: {
+  exp: Expense;
+  toggleConversion: boolean;
+})  {
+  // TODO for decimal currencies, do toFixed(2) on them
+  const amount = toggleConversion ? usd(exp.amount, exp.currency) : exp.amount;
+  const currency: Currency = toggleConversion ? 'USD' : exp.currency;
+
+  const contStyle: CSS = {
+    marginBlock: "4px",
+  };
+
+  const excludedTexStyle: CSS = {
+    fontSize: "8px",
+    lineHeight: "8px",
+    marginBottom: "0",
+  };
+
+  const currencyStyle: CSS = {
+    fontSize: "10px",
+  };
+
+  const timeStyle: CSS = {
+    fontSize: "10px",
+    lineHeight: "10px",
+    marginTop: "2px",
+  };
+
+  const amountStyle: CSS = {
+    fontSize: "12px",
+  };
+
+  const descButtonStyle: CSS = {
+    fontSize: "11px",
+  };
+
+  const tagOverrideStyle: CSS | undefined = exp.tag ? {
+    color: TagColorMap[exp.tag],
+    userSelect: "none",
+  } : undefined;
+
+  const desc = exp.description;
+
+  return (
+    <div style={contStyle}>
+      {exp.excluded ? <p style={excludedTexStyle}>Excluded</p> : null}
+      <span style={tagOverrideStyle}>
+        <span style={currencyStyle}>{currency}</span>
+        <span style={amountStyle}>{amount}</span>
+        {exp.tag ? <Tag tag={exp.tag}/> : null}
+      </span>
+      <p style={timeStyle}>{moment(exp.timestamp).format("DD/MM/YY HH:mm")}</p>
+      <Description
+        readOnly={true}
+        initialButtonStyle={descButtonStyle}
+        initialShowText={!!desc}
+        description={desc}
+        onAddDescription={() => undefined}
+      />
+    </div>
+  )
 }
 
 function CompactOverUnder({
@@ -272,10 +349,179 @@ function StatValue({
     );
   }
 
+  let formattedValue;
+  if (typeof value === 'number') {
+    formattedValue = value.toFixed(2);
+  }
+
   return (
     <div style={containerStyle ?? defaultContainerStyle}>
       <span style={labelStyle}>{label}</span>
-      <span style={valueStyle ?? defaultValueStyle}>{value}</span>
+      <span style={valueStyle ?? defaultValueStyle}>{formattedValue ?? value}</span>
+    </div>
+  );
+}
+
+const EMPTY_TAG_NAMES:  Record<Tag, string> = {
+  brown: '',
+  red: '',
+  orange: '',
+  gold: '',
+  green: '',
+  blue: '',
+  purple: '',
+};
+
+function TagNamer({
+  settings,
+  onClickTag,
+  onTrySave
+}: {
+  settings: Settings;
+  onClickTag: (tag: Tag) => void;
+  onTrySave: () => void;
+}) {
+  const [tagNames, setTagNames] = useState<Record<Tag, string>>(settings.tagsNames ?? EMPTY_TAG_NAMES);
+
+  const onChangeTagName = (tag: Tag, name: string) => {
+    if (!settings.tagsNames) {
+      // TODO this block can be removed after tagNames is set
+      settings.tagsNames = EMPTY_TAG_NAMES;
+    }
+
+    settings.tagsNames[tag] = name;
+    const newTagNames = {...settings.tagsNames};
+    setTagNames(newTagNames);
+    onTrySave();
+  };
+
+  const TagNameField = ({tag, name}: {tag: Tag, name: string}) => {
+    const tagNameFieldStyle: CSS = {
+      display: "flex",
+      marginBlock: "2px"
+    };
+
+    const descLabel = '+Name';
+    const descStyle: CSS = {
+      color: TagColorMap[tag],
+      fontSize: "12px",
+    };
+
+    const moreStyle: CSS = {
+      cursor: "pointer"
+    };
+
+    return (
+      <div style={tagNameFieldStyle}>
+        <Tag tag={tag} onClickTag={onClickTag} moreStyle={moreStyle}/>
+        <Description
+          textStyleOverride={descStyle}
+          label={descLabel}
+          description={name}
+          initialShowText={!!name}
+          onAddDescription={(text) => onChangeTagName(tag, text)}/>
+      </div>
+    );
+  };
+
+  return (
+    <div>
+      {Object.entries(tagNames).map((t) => <TagNameField key={`tn${t}`} tag={t[0]} name={t[1]}/>)}
+    </div>
+  );
+}
+
+function TagView({
+  expenses,
+  settings,
+  onTrySave,
+  toggleConversion,
+}: {
+  expenses: Expense[];
+  settings: Settings;
+  onTrySave: () => void;
+  toggleConversion: boolean;
+}) {
+  const [from, setFrom] = useState(
+    (expenses.length > 0 ? moment(expenses[expenses.length - 1].timestamp) : moment()).format("YYYY-MM-DD HH:mm")
+  );
+  const [to, setTo] = useState(moment().format("YYYY-MM-DD HH:mm"));
+  const [tagFilter, setTagFilter] = useState<Tag[]>([]);
+
+  const onSetFrom = (e: any) => {
+    setFrom(e.target.value);
+    e.stopPropagation();
+  };
+
+  const onSetTo = (e: any) => {
+    setTo(e.target.value);
+    e.stopPropagation();
+  };
+
+  const onSetTagFilter = (tag: Tag) => {
+    let newFilter;
+    if (tagFilter.includes(tag)) {
+      newFilter = tagFilter.filter((t) => t !== tag);
+    } else {
+      newFilter = [...tagFilter, tag];
+    }
+    setTagFilter(newFilter);
+  };
+
+  const filteredExpenses = expenses.filter((e) => {
+    const toM = moment(to);
+    const fromM = moment(from);
+    const passesTagFilter = tagFilter.length > 0 ? tagFilter.includes(e.tag ?? '') : true;
+    return moment(e.timestamp).isSameOrAfter(fromM) && moment(e.timestamp).isSameOrBefore(toM) && passesTagFilter && e.tag;
+  });
+
+  let totalOfExpenses = 0;
+  let totalOfExpensesText = null;
+  filteredExpenses.forEach((fe) => totalOfExpenses += fe.amount);
+  if (toggleConversion) {
+    totalOfExpenses = usd(totalOfExpenses, settings.currency);
+  }
+  if (totalOfExpenses > 0) {
+    const currencyStyle: CSS = {
+      fontSize: "10px"
+    };
+    // TODO just make expenseValue a component
+    totalOfExpensesText = <><span style={currencyStyle}>{toggleConversion ? 'USD' : settings.currency}</span><span>{totalOfExpenses}</span></>
+  }
+
+  const labelStyle: CSS = {
+    fontSize: "12px",
+    display: "block",
+  };
+
+  const tagViewContainerStyle: CSS = {
+    maxHeight: "400px",
+    overflowY: "scroll",
+  };
+
+  return (
+    <div style={tagViewContainerStyle}>
+      <TagNamer settings={settings} onClickTag={onSetTagFilter} onTrySave={onTrySave}/>
+      <hr/>
+      <label style={labelStyle}>
+        from&nbsp;
+        <input type={"datetime-local"} value={from} onChange={onSetFrom}/>
+      </label>
+      <label style={labelStyle}>
+        to&nbsp;
+        <input type={"datetime-local"} value={to} onChange={onSetTo}/>
+      </label>
+      <div>
+        {tagFilter.map((t) => <Tag key={`tf${t}`} tag={t}/>)}
+      </div>
+      <hr/>
+      {filteredExpenses.length > 0 ? <StatValue label={'total of shown expenses: '} value={totalOfExpensesText}/> : null}
+      <hr/>
+      {filteredExpenses.length > 0 ?
+        filteredExpenses.map((e) => <CompactExpense key={`ce${e.timestamp}`} exp={e} toggleConversion={toggleConversion}/>)
+        :
+        <div>no expenses in range</div>
+      }
     </div>
   );
 }
@@ -400,11 +646,13 @@ function Stats({
   periods,
   settings,
   onClose,
+  onTrySave,
   toggleConversion,
 }: {
   periods: SpendPeriod[];
   settings: Settings;
   onClose: () => void;
+  onTrySave: () => void;
   toggleConversion: boolean;
 }) {
   // @ts-ignore
@@ -448,10 +696,15 @@ function Stats({
       </div>
     );
   } else if (page === 'range') {
-    statDisplay = <RangeStat key={'range'} periods={periodsToUse} currency={settings.currency} toggleConversion={toggleConversion} containerStyle={statsDisplayStyle}/>
+    statDisplay = <RangeStat key={'range'} periods={periodsToUse} currency={settings.currency} toggleConversion={toggleConversion} containerStyle={statsDisplayStyle}/>;
   } else if (page === 'rangeUSD') {
     const periodsInUSD = usdAll(periods);
-    statDisplay = <RangeStat key={'rangeUSD'} periods={periodsInUSD} currency={'USD'} toggleConversion={toggleConversion} containerStyle={statsDisplayStyle}/>
+    statDisplay = <RangeStat key={'rangeUSD'} periods={periodsInUSD} currency={'USD'} toggleConversion={toggleConversion} containerStyle={statsDisplayStyle}/>;
+  } else if (page === 'tagView' ) {
+    const expenses = consecutiveOnly ?
+      getExpensesFromPeriods(getConsecutiveCurrencyPeriods(periods, settings.currency))
+      : getExpensesFromPeriods(periods);
+    statDisplay = <TagView expenses={expenses} settings={settings} onTrySave={onTrySave} toggleConversion={toggleConversion}/>;
   }
 
   const titleStyle: CSS = {
@@ -588,10 +841,24 @@ function Settings({
   )
 }
 
-function Tag({tag}: {tag: Tag | null}) {
+function Tag({
+  tag,
+  onClickTag,
+  moreStyle = {},
+}: {
+  tag: Tag | null;
+  onClickTag?: (tag: Tag) => void;
+  moreStyle?: CSS;
+}) {
   if (tag === null) {
     return null;
   }
+
+  const onClickTagLocal = () => {
+    if (onClickTag) {
+      onClickTag(tag);
+    }
+  };
 
   const tagStyle: CSS = {
     background: TagColorMap[tag],
@@ -601,12 +868,13 @@ function Tag({tag}: {tag: Tag | null}) {
     border:" none",
     borderRadius: "14px",
     marginLeft: "4px",
+    ...moreStyle
   };
 
   // TODO add react tooltip to show tag name?
   return (
-    <div style={tagStyle}/>
-  )
+    <div style={tagStyle} onClick={onClickTagLocal}/>
+  );
 }
 
 function NewExpense({
@@ -662,13 +930,17 @@ function Description({
   description,
   onAddDescription,
   label = '+Desc',
-  initialButtonStyle
+  initialButtonStyle,
+  readOnly,
+  textStyleOverride,
 }:{
   initialShowText: boolean;
   description?: string;
   onAddDescription: ({}: any) => void;
   label?: string;
   initialButtonStyle?: CSS;
+  readOnly?: boolean;
+  textStyleOverride?: CSS;
 }){
   const [text, setText] = useState(description);
   const [showText, setShowText] = useState(initialShowText);
@@ -678,6 +950,16 @@ function Description({
     fontSize: "12px"
   };
 
+  if (readOnly && text) {
+    return (
+      <div style={textStyleOverride ?? textStyle}>
+        {description}
+      </div>
+    );
+  } else if (readOnly && !text) {
+    return null;
+  }
+
   const onClickText = () => {
     setShowText(false);
     setEditing(true);
@@ -685,10 +967,10 @@ function Description({
 
   if (text && showText && !editing) {
     return (
-      <div style={textStyle} onClick={onClickText} >
+      <div style={textStyleOverride ?? textStyle} onClick={onClickText} >
         {description}
       </div>
-    )
+    );
   }
   
   const onClickEdit = () => {
@@ -1239,11 +1521,19 @@ function App() {
     let limit = currentPeriod?.limit ?? settings.limits[settings.currency];
     let displaySpent = spent;
     let allExpensesSpent = 0;
+    let differenceFound = false;
+    let includedSpent = 0;
     currentPeriod.expenses.forEach((e) => {
       allExpensesSpent += e.amount;
+      includedSpent += e.excluded ? 0 : e.amount;
+      if (e.excluded && !differenceFound) {
+        differenceFound = true;
+      }
     });
-    const showAllExpensesSpent = displaySpent != allExpensesSpent;
-
+    const showAllExpensesSpent = (displaySpent != allExpensesSpent) && !differenceFound;
+    if (differenceFound) {
+      displaySpent = includedSpent;
+    }
 
     if (toggleConversion) {
       limit = usd(limit, currentPeriod.currency);
@@ -1405,7 +1695,7 @@ function App() {
       </div>
       {toggleStats ?
         <ModalContext onClickBackground={onToggleStats}>
-          <Stats periods={periods} settings={settings} onClose={() => onToggleStats(false)} toggleConversion={toggleConversion}/>
+          <Stats periods={periods} settings={settings} onClose={() => onToggleStats(false)} toggleConversion={toggleConversion} onTrySave={onTrySave}/>
         </ModalContext>
         : null}
       <Toggle onToggle={onToggleStats} icon={'stats'} index={2} isActive={toggleStats}/>
