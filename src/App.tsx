@@ -208,7 +208,42 @@ function ModalContext({onClickBackground, children}:{onClickBackground: () => vo
   return <div style={style} onClick={onClickBackgroundLocal}>{children}</div>
 }
 
-function CompactExpense ({
+// TODO replace all amounts with this
+/* @ts-ignore */
+function Amount({
+  currency,
+  amount,
+  showDecimal,
+  amountContainerStyle,
+  currencyStyle,
+  amountStyle,
+  onClickAmount,
+}:{
+  currency: Currency;
+  amount: number;
+  showDecimal?: boolean;
+  onClickAmount?: (amount: number, currency: Currency) => void;
+  amountContainerStyle?: CSS;
+  currencyStyle?: CSS;
+  amountStyle?: CSS;
+}) {
+  const localOnClick = () => {
+    if (onClickAmount) {
+      onClickAmount(amount, currency);
+    }
+  };
+
+  const decimalAmount = showDecimal ? amount.toFixed(2) : undefined;
+
+  return (
+    <span style={amountContainerStyle} onClick={localOnClick}>
+      <span style={currencyStyle}>{currency}</span>
+      <span style={amountStyle}>{decimalAmount ?? amount}</span>
+    </span>
+  );
+}
+
+function CompactExpense({
   exp,
   toggleConversion,
 }: {
@@ -485,7 +520,6 @@ function TagView({
     const currencyStyle: CSS = {
       fontSize: "10px"
     };
-    // TODO just make expenseValue a component
     totalOfExpensesText = <><span style={currencyStyle}>{toggleConversion ? 'USD' : settings.currency}</span><span>{totalOfExpenses}</span></>
   }
 
@@ -1512,7 +1546,7 @@ function App() {
   const OverUnder = () => {
     const contStyle: CSS = {
       textAlign: "center"
-    }
+    };
     const spentStyle: CSS = {
       fontSize: "16px",
       margin: "4px"
@@ -1521,17 +1555,17 @@ function App() {
     let limit = currentPeriod?.limit ?? settings.limits[settings.currency];
     let displaySpent = spent;
     let allExpensesSpent = 0;
-    let differenceFound = false;
+    let showAllExpensesSpent = false;
     let includedSpent = 0;
     currentPeriod.expenses.forEach((e) => {
       allExpensesSpent += e.amount;
       includedSpent += e.excluded ? 0 : e.amount;
-      if (e.excluded && !differenceFound) {
-        differenceFound = true;
+      if (e.excluded && !showAllExpensesSpent) {
+        showAllExpensesSpent = true;
       }
     });
-    const showAllExpensesSpent = (displaySpent != allExpensesSpent) && !differenceFound;
-    if (differenceFound) {
+
+    if (showAllExpensesSpent) {
       displaySpent = includedSpent;
     }
 
@@ -1544,6 +1578,17 @@ function App() {
     }
     let color = displaySpent >= limit ? 'red' : 'green';
     color = displaySpent >= (limit * WARN_THRESHOLD) && displaySpent < limit ? 'orange' : color;
+
+    let allExpensesColor;
+    if (showAllExpensesSpent) {
+      if (color !== 'red') {
+        allExpensesColor = allExpensesSpent >= limit ? 'red' : 'green';
+        allExpensesColor = allExpensesSpent >= (limit * WARN_THRESHOLD) && allExpensesSpent < limit ? 'orange' : allExpensesColor;
+      } else {
+        allExpensesColor = color;
+      }
+    }
+
     const spentNumberStyle: CSS = {
       color,
       fontSize: "28px",
@@ -1587,6 +1632,7 @@ function App() {
     const allExpensesSpentNumberStyle: CSS = {
       fontSize: "10px",
       fontWeight: "bold",
+      color: allExpensesColor,
     };
 
     const allExpensesSpentCurrencyStyle: CSS = {
