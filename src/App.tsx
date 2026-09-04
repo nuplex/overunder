@@ -31,7 +31,7 @@ const USDCurrencyConversionMap: Record<Currency, number> = {
   USD: 1
 };
 
-const TAGS = ['brown', 'red', 'orange', 'gold', 'green', 'blue', 'purple'];
+const TAGS = ['brown', 'red', 'orange', 'gold', 'green', 'blue', 'purple', 'pink'];
 type Tag = typeof TAGS[number];
 const TagColorMap: Record<Tag, string> = {
   brown: '#765B2E',
@@ -41,6 +41,7 @@ const TagColorMap: Record<Tag, string> = {
   green: '#7AC74F',
   blue: '#2D7DD2',
   purple: '#5E0462',
+  pink: '#E574BC',
 };
 
 const EMPTY_TAG_NAMES:  Record<Tag, string> = {
@@ -51,6 +52,7 @@ const EMPTY_TAG_NAMES:  Record<Tag, string> = {
   green: '',
   blue: '',
   purple: '',
+  pink: '',
 };
 
 type Expense = {
