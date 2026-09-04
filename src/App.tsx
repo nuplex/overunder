@@ -455,7 +455,7 @@ function TagNamer({
   onClickTag: (tag: Tag) => void;
   onTrySave: () => void;
 }) {
-  const [tagNames, setTagNames] = useState<Record<Tag, string>>(settings.tagsNames ?? EMPTY_TAG_NAMES);
+  const [tagNames, setTagNames] = useState<Record<Tag, string>>({...EMPTY_TAG_NAMES, ...(settings.tagsNames ?? {})});
 
   const onChangeTagName = (tag: Tag, name: string) => {
     if (!settings.tagsNames) {
