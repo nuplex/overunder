@@ -1344,6 +1344,11 @@ function AreYouSure({
 
   const onInitialClick = () => setShowAreYouSure(true);
 
+  const localOnYes = () => {
+    onYes();
+    setShowAreYouSure(false);
+  };
+
   const textStyle: CSS = {
     fontSize: "14px"
   };
@@ -1356,7 +1361,7 @@ function AreYouSure({
   const YesOrNo = () => (
     <div>
       <span style={textStyle}>Are you sure?</span>&nbsp;
-      <button onClick={onYes}>Yes</button>&nbsp;
+      <button onClick={localOnYes}>Yes</button>&nbsp;
       <button onClick={() => setShowAreYouSure(false)}>No</button>
     </div>
   );
