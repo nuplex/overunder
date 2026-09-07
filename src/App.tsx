@@ -1469,7 +1469,13 @@ function App() {
     }
 
     if (settingsJson) {
-      const loadedSettings = JSON.parse(settingsJson);
+      const loadedSettings: Settings = JSON.parse(settingsJson);
+
+      // TODO not sure why this is needed? odd bug
+      if (!loadedSettings.tagsNames) {
+        loadedSettings.tagsNames = EMPTY_TAG_NAMES;
+      }
+
       setSettings(loadedSettings);
     }
 
