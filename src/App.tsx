@@ -1,10 +1,10 @@
 import './App.css'
-import {type CSSProperties, type JSX, useState} from "react";
+import {type CSSProperties, type JSX, useEffect, useState} from "react";
 import moment from "moment";
 
 type CSS = Partial<CSSProperties>;
   
-type Icon = 'currencyConversion' | 'stats';
+type Icon = 'currencyConversion' | 'stats' | 'percent';
 const ICONS: Record<Icon, JSX.Element> = {
   currencyConversion:
     <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="#1f1f1f" viewBox="0 -960 960 960">
@@ -13,10 +13,15 @@ const ICONS: Record<Icon, JSX.Element> = {
   stats:
     <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="#1f1f1f" viewBox="0 -960 960 960">
       <path d="M160-160v-320h160v320zm240 0v-640h160v640zm240 0v-440h160v440z"/>
+    </svg>,
+  percent:
+    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="#1f1f1f" viewBox="0 -960 960 960">
+      <path d="M300-520q-58 0-99-41t-41-99 41-99 99-41 99 41 41 99-41 99-99 41m0-80q25 0 42.5-17.5T360-660t-17.5-42.5T300-720t-42.5 17.5T240-660t17.5 42.5T300-600m360 440q-58 0-99-41t-41-99 41-99 99-41 99 41 41 99-41 99-99 41m42.5-97.5Q720-275 720-300t-17.5-42.5T660-360t-42.5 17.5T600-300t17.5 42.5T660-240t42.5-17.5M216-160l-56-56 584-584 56 56z"/>
     </svg>
 };
 
 const WARN_THRESHOLD = 0.80;
+const TAG_NAME_FLASH = 2000;
 
 const CURRENCIES = ['USD', 'HKD', 'SGD', 'NTD', 'JPY', 'THB'] as const;
 type Currency = typeof CURRENCIES[number];
@@ -80,7 +85,7 @@ type LimitsSettings = Record<Currency, number>;
 type Settings = {
   currency: Currency;
   limits: LimitsSettings;
-  tagsNames?: Record<Tag, string>;
+  tagsNames: Record<Tag, string>;
 };
 
 const DEFAULT_SETTINGS: Settings = {
@@ -92,7 +97,8 @@ const DEFAULT_SETTINGS: Settings = {
     NTD: 600,
     HKD: 160,
     THB: 600,
-  }
+  },
+  tagsNames: EMPTY_TAG_NAMES,
 };
 
 type SerializedData = {
@@ -136,6 +142,13 @@ function usdAll(periods: SpendPeriod[]) {
   }
 
   return newPeriods;
+}
+
+const ONE_HUNDRED_PERCENT = '100%';
+
+function percent(amount: number, total: number): string {
+  const raw = Math.round((amount/total) * 100);
+  return raw + '%';
 }
 
 function getExpensesFromPeriods(periods: SpendPeriod[]) {
@@ -258,9 +271,11 @@ function Amount({
 function CompactExpense({
   exp,
   toggleConversion,
+  settings,
 }: {
   exp: Expense;
   toggleConversion: boolean;
+  settings: Settings;
 })  {
   // TODO for decimal currencies, do toFixed(2) on them
   const amount = toggleConversion ? usd(exp.amount, exp.currency) : exp.amount;
@@ -307,7 +322,7 @@ function CompactExpense({
       <span style={tagOverrideStyle}>
         <span style={currencyStyle}>{currency}</span>
         <span style={amountStyle}>{amount}</span>
-        {exp.tag ? <Tag tag={exp.tag}/> : null}
+        {exp.tag ? <Tag tag={exp.tag} settings={settings}/> : null}
       </span>
       <p style={timeStyle}>{moment(exp.timestamp).format("DD/MM/YY HH:mm")}</p>
       <Description
@@ -324,12 +339,14 @@ function CompactExpense({
 function CompactOverUnder({
   period,
   toggleConversion,
+  togglePercent,
   showDate,
   onClickOverUnder,
 }: {
   period: SpendPeriod;
   toggleConversion: boolean;
-  showDate?: boolean;
+  togglePercent: boolean;
+  showDate: boolean;
   onClickOverUnder?: (period: SpendPeriod) => void;
 }){
   let limit = toggleConversion ? usd(period.limit, period.currency) : period.limit;
@@ -391,14 +408,19 @@ function CompactOverUnder({
     cursor: onClickOverUnder ? 'pointer' : undefined
   };
 
+  let totalPercent;
+  if (togglePercent) {
+    totalPercent = percent(total, limit);
+  }
+
   return (
     <div style={containerStyle} key={period.start} onClick={localOnClickOverUnder}>
       {showDate ? <div style={dateStyle}>{date}</div> : null}
       <span style={currencyStyle}>{currency}</span>
-      <span style={totalStyle}>{total}</span>
+      <span style={totalStyle}>{totalPercent ?? total}</span>
       <span style={overunderStyle}>&nbsp;{text}&nbsp;</span>
       <span style={currencyStyle}>{currency}</span>
-      <span style={priceFont}>{limit}</span>
+      <span style={priceFont}>{togglePercent ? ONE_HUNDRED_PERCENT : limit}</span>
     </div>
   );
 }
@@ -455,14 +477,9 @@ function TagNamer({
   onClickTag: (tag: Tag) => void;
   onTrySave: () => void;
 }) {
-  const [tagNames, setTagNames] = useState<Record<Tag, string>>({...EMPTY_TAG_NAMES, ...(settings.tagsNames ?? {})});
+  const [tagNames, setTagNames] = useState<Record<Tag, string>>(settings.tagsNames);
 
   const onChangeTagName = (tag: Tag, name: string) => {
-    if (!settings.tagsNames) {
-      // TODO this block can be removed after tagNames is set
-      settings.tagsNames = EMPTY_TAG_NAMES;
-    }
-
     settings.tagsNames[tag] = name;
     const newTagNames = {...settings.tagsNames};
     setTagNames(newTagNames);
@@ -487,7 +504,7 @@ function TagNamer({
 
     return (
       <div style={tagNameFieldStyle}>
-        <Tag tag={tag} onClickTag={onClickTag} moreStyle={moreStyle}/>
+        <Tag tag={tag} onClickTag={onClickTag} moreStyle={moreStyle} settings={settings}/>
         <Description
           textStyleOverride={descStyle}
           label={descLabel}
@@ -585,13 +602,13 @@ function TagView({
         <input type={"datetime-local"} value={to} onChange={onSetTo}/>
       </label>
       <div>
-        {tagFilter.map((t) => <Tag key={`tf${t}`} tag={t}/>)}
+        {tagFilter.map((t) => <Tag key={`tf${t}`} tag={t} settings={settings}/>)}
       </div>
       <hr/>
       {filteredExpenses.length > 0 ? <StatValue label={'total of shown expenses: '} value={totalOfExpensesText}/> : null}
       <hr/>
       {filteredExpenses.length > 0 ?
-        filteredExpenses.map((e) => <CompactExpense key={`ce${e.timestamp}`} exp={e} toggleConversion={toggleConversion}/>)
+        filteredExpenses.map((e) => <CompactExpense key={`ce${e.timestamp}`} exp={e} toggleConversion={toggleConversion} settings={settings}/>)
         :
         <div>no expenses in range</div>
       }
@@ -603,11 +620,15 @@ function RangeStat({
   periods,
   currency,
   toggleConversion,
+  togglePercent,
+  showDate,
   containerStyle,
 }: {
   periods: SpendPeriod[];
   currency: Currency;
   toggleConversion: boolean;
+  togglePercent: boolean;
+  showDate: boolean;
   containerStyle?: CSS;
 }) {
   const [from, setFrom] = useState(
@@ -687,11 +708,11 @@ function RangeStat({
       </label>
       <StatValue label={`total of ${periodsIncluded} ${currency} periods: `} value={totalOfPeriods} noValueMessage={`no periods have ${currency} (change in settings)`}/>
       <StatValue label={`average of ${periodsIncluded} ${currency}  periods: `} value={averageOfPeriods} noValueMessage={`cannot calculate average`}/>
-      <StatValue label={`highest spend: `} value={highestPeriod ? <CompactOverUnder period={highestPeriod} toggleConversion={toggleConversion}/> : null} noValueMessage={`cannot calculate highest spend`}/>
-      <StatValue label={`lowest spend: `} value={lowestPeriod ? <CompactOverUnder period={lowestPeriod} toggleConversion={toggleConversion}/> : null} noValueMessage={`cannot calculate lowest spend`}/>
+      <StatValue label={`highest spend: `} value={highestPeriod ? <CompactOverUnder period={highestPeriod} toggleConversion={toggleConversion} togglePercent={togglePercent} showDate={showDate}/> : null} noValueMessage={`cannot calculate highest spend`}/>
+      <StatValue label={`lowest spend: `} value={lowestPeriod ? <CompactOverUnder period={lowestPeriod} toggleConversion={toggleConversion} togglePercent={togglePercent} showDate={showDate}/> : null} noValueMessage={`cannot calculate lowest spend`}/>
       <hr/>
       {periodsInRange.length > 0 ?
-        periodsInRange.map((p) => <CompactOverUnder key={p.start} period={p} toggleConversion={toggleConversion}/>)
+        periodsInRange.map((p) => <CompactOverUnder key={p.start} period={p} toggleConversion={toggleConversion} togglePercent={togglePercent} showDate={showDate}/>)
         :
         <div>no spend periods in range</div>
       }
@@ -722,6 +743,7 @@ function Stats({
   onTrySave,
   onClickOverUnder,
   toggleConversion,
+  togglePercent,
 }: {
   periods: SpendPeriod[];
   settings: Settings;
@@ -729,6 +751,7 @@ function Stats({
   onTrySave: () => void;
   onClickOverUnder: (period: SpendPeriod) => void;
   toggleConversion: boolean;
+  togglePercent: boolean;
 }) {
   // @ts-ignore
   const [page, setPage] = useState<StatPage>('compact');
@@ -779,15 +802,16 @@ function Stats({
             toggleConversion={toggleConversion}
             showDate={showDates}
             onClickOverUnder={onClickOverUnder}
+            togglePercent={togglePercent}
           />
         )}
       </div>
     );
   } else if (page === 'range') {
-    statDisplay = <RangeStat key={'range'} periods={periodsToUse} currency={settings.currency} toggleConversion={toggleConversion} containerStyle={statsDisplayStyle}/>;
+    statDisplay = <RangeStat key={'range'} periods={periodsToUse} currency={settings.currency} toggleConversion={toggleConversion} containerStyle={statsDisplayStyle} togglePercent={togglePercent} showDate={showDates}/>;
   } else if (page === 'rangeUSD') {
     const periodsInUSD = usdAll(periods);
-    statDisplay = <RangeStat key={'rangeUSD'} periods={periodsInUSD} currency={'USD'} toggleConversion={toggleConversion} containerStyle={statsDisplayStyle}/>;
+    statDisplay = <RangeStat key={'rangeUSD'} periods={periodsInUSD} currency={'USD'} toggleConversion={toggleConversion} containerStyle={statsDisplayStyle} togglePercent={togglePercent} showDate={showDates}/>;
   } else if (page === 'tagView' ) {
     const expenses = consecutiveOnly ?
       getExpensesFromPeriods(getConsecutiveCurrencyPeriods(periods, settings.currency))
@@ -845,13 +869,13 @@ function Stats({
               same-currency period group
             </label>
           </div> : null}
-        {page === 'compact' ?
-          <div style={checkboxStyle}>
-            <label>
-              <input type="checkbox" onChange={onShowDates} checked={showDates}/>
-              show dates
-            </label>
-          </div> : null}
+        {page !== 'tagView' ?
+        <div style={checkboxStyle}>
+          <label>
+            <input type="checkbox" onChange={onShowDates} checked={showDates}/>
+            show dates
+          </label>
+        </div> : null}
       </div>
     </div>
   );
@@ -940,24 +964,45 @@ function Settings({
 function Tag({
   tag,
   onClickTag,
+  settings,
   moreStyle = {},
 }: {
   tag: Tag | null;
   onClickTag?: (tag: Tag) => void;
+  settings: Settings;
   moreStyle?: CSS;
 }) {
+  const [showName, setShowName] = useState(false);
+  const name = tag ? settings.tagsNames[tag] : null;
+  const color = tag ? TagColorMap[tag] : undefined;
+
+  useEffect(() => {
+    setTimeout(() => {
+        setShowName(false);
+    }, TAG_NAME_FLASH)
+  }, [showName]);
+
   if (tag === null) {
     return null;
   }
 
-  const onClickTagLocal = () => {
+  const onClickTagLocal = (e: any) => {
     if (onClickTag) {
       onClickTag(tag);
+    } else {
+      if (name) {
+        setShowName(true);
+        e.stopPropagation();
+      }
     }
   };
 
+  const tagContainerStyle: CSS = {
+    display: "inline-flex"
+  };
+
   const tagStyle: CSS = {
-    background: TagColorMap[tag],
+    background: color,
     display: "inline-block",
     height: "14px",
     width: "14px",
@@ -967,9 +1012,23 @@ function Tag({
     ...moreStyle
   };
 
-  // TODO add react tooltip to show tag name?
+  const tagNameStyle: CSS = {
+    color,
+    display: "inline-block",
+    fontSize: "10px",
+    height: "14px",
+    lineHeight: "14px",
+    paddingInline: "4px",
+    border: `1px solid ${color}`,
+    borderRadius: "14px",
+    marginLeft: "4px",
+  };
+
   return (
-    <div style={tagStyle} onClick={onClickTagLocal}/>
+    <div style={tagContainerStyle}>
+      <div style={tagStyle} onClick={onClickTagLocal}/>
+      {showName ? <div style={tagNameStyle}>{name}</div> : null}
+    </div>
   );
 }
 
@@ -1112,6 +1171,7 @@ function ViewExpense ({
   onExcludeExpense,
   allowDelete,
   conversionToggled,
+  settings,
 }: {
   exp: Expense;
   setTrySave: ({}: any) => void;
@@ -1119,6 +1179,7 @@ function ViewExpense ({
   onExcludeExpense: () => void;
   allowDelete: boolean;
   conversionToggled: boolean;
+  settings: Settings;
 })  {
   const [desc, setDesc] = useState(exp.description);
   const [excluded, setExcluded] = useState(exp.excluded);
@@ -1212,7 +1273,7 @@ function ViewExpense ({
   return (
     <div style={contStyle}>
       {excluded ? <p style={excludedTexStyle}>Excluded</p> : null}
-      <span onClick={onChangeTag} style={tagOverrideStyle}><span style={currencyStyle}>{currency}</span><span>{amount}</span><Tag tag={tag}/></span>
+      <span onClick={onChangeTag} style={tagOverrideStyle}><span style={currencyStyle}>{currency}</span><span>{amount}</span><Tag tag={tag} settings={settings}/></span>
       <p style={timeStyle}>{moment(exp.timestamp).format("DD/MM/YY HH:mm")}</p>
       <Description initialButtonStyle={descButtonStyle} initialShowText={!!desc} description={desc} onAddDescription={onAddDescription}/>
       {allowExclude ? <button style={excludeBtnStyle} onClick={onExcludeExpenseLocal}>{excludeText}</button> : null}
@@ -1230,6 +1291,7 @@ function SpendPeriod({
   isMultiCurrency = false,
   allowDelete,
   conversionToggled,
+  settings,
 }: {
   period: SpendPeriod;
   onTrySave: () => void;
@@ -1238,6 +1300,7 @@ function SpendPeriod({
   isMultiCurrency?: boolean;
   allowDelete: boolean;
   conversionToggled: boolean;
+  settings: Settings;
 }) {
   // @ts-ignore
   //const [expenses, setExpenses] = useState(period.expenses);
@@ -1277,6 +1340,7 @@ function SpendPeriod({
           onExcludeExpense={onExcludeExpenseInPeriod}
           allowDelete={allowDelete}
           conversionToggled={conversionToggled}
+          settings={settings}
         />)}
     </div>
   );
@@ -1296,7 +1360,7 @@ function Toggle({
   isActive: boolean
 }){
   let fallback = '-';
-  const fromBottom = index == 1 ? 24 : (24 * index) + 40;
+  const fromBottom = index == 1 ? 24 : ((24 * index) + (40 * (index - 1)));
   const background = isActive ? "rgba(255,215,0,0.95)" : "rgba(230,230,230,0.95)";
   const textColor = isActive ? "#333" : undefined;
 
@@ -1304,7 +1368,7 @@ function Toggle({
     background,
     position: "fixed",
     bottom: fromBottom,
-    right: 24,
+    right: 20,
     border: "none",
     borderRadius: "50px",
     width: "48px",
@@ -1384,6 +1448,7 @@ function App() {
   const [trySave, setTrySave] = useState(false);
   const [toggleConversion, setToggleConversion] = useState(false);
   const [toggleStats, setToggleStats] = useState(false);
+  const [togglePercent, setTogglePercent] = useState(false);
 
   /* serialization functions */
 
@@ -1552,6 +1617,16 @@ function App() {
     setCurrentPeriod(periods[idx]);
   };
 
+  const onAddPeriodName = (name: string) => {
+    currentPeriod.name = name;
+    const newPeriod = {...currentPeriod, name};
+    const newPeriods = [...periods];
+    newPeriods[currentPeriodIndex] = newPeriod;
+    setCurrentPeriod(newPeriod);
+    setPeriods(newPeriods);
+    setTrySave(true);
+  };
+
   const onEndPeriod = () => {
     // Not the current period that is being display, which is what it normally means.
     const actualCurrentPeriod = periods[0];
@@ -1588,16 +1663,6 @@ function App() {
     setToggleConversion(!toggleConversion);
   };
 
-  const onAddPeriodName = (name: string) => {
-    currentPeriod.name = name;
-    const newPeriod = {...currentPeriod, name};
-    const newPeriods = [...periods];
-    newPeriods[currentPeriodIndex] = newPeriod;
-    setCurrentPeriod(newPeriod);
-    setPeriods(newPeriods);
-    setTrySave(true);
-  };
-
   const onToggleStats = (val: boolean | null = null) => {
     if (val === true || val === false) {
       setToggleStats(val);
@@ -1605,6 +1670,10 @@ function App() {
       const newVal = !toggleStats;
       setToggleStats(newVal);
     }
+  };
+
+  const onTogglePercent = () => {
+    setTogglePercent(!togglePercent);
   };
 
   const onClickedOverUnderInStats = (period: SpendPeriod) => {
@@ -1743,16 +1812,23 @@ function App() {
       fontSize: "8px"
     };
 
+    let displayPercent;
+    let displayAllExpensesPercent;
+    if (togglePercent) {
+      displayPercent = percent(displaySpent, limit);
+      displayAllExpensesPercent = percent(allExpensesSpent, limit);
+    }
+
     return (
       <div style={contStyle}>
         <h5 style={spentStyle}>{spentText}</h5>
         <div>
-          <span>{currencyDisplay}</span><span style={spentNumberStyle}>{displaySpent}</span>
+          <span>{currencyDisplay}</span><span style={spentNumberStyle}>{displayPercent ?? displaySpent}</span>
         </div>
-        {showAllExpensesSpent ? <div style={allExpensesSpentContStyle}>(<span style={allExpensesSpentCurrencyStyle}>{currencyDisplay}</span><span style={allExpensesSpentNumberStyle}>{allExpensesSpent}</span>)</div> : null}
+        {showAllExpensesSpent ? <div style={allExpensesSpentContStyle}>(<span style={allExpensesSpentCurrencyStyle}>{currencyDisplay}</span><span style={allExpensesSpentNumberStyle}>{displayAllExpensesPercent ?? allExpensesSpent}</span>)</div> : null}
         <h6 style={overunderStyle}>{overunderText}</h6>
         <div>
-          <span>{currencyDisplay}</span><span style={limitNumberStyle}>{limit}</span>
+          <span>{currencyDisplay}</span><span style={limitNumberStyle}>{togglePercent ? ONE_HUNDRED_PERCENT : limit}</span>
         </div>
       </div>
     )
@@ -1799,7 +1875,15 @@ function App() {
         <button onClick={next} disabled={currentPeriodIndex === periods.length - 1}>{`>`}</button>
       </div>
       <Description initialShowText={!!currentPeriod.name} description={currentPeriod.name} onAddDescription={onAddPeriodName} label={'+Period Name'}/>
-      <SpendPeriod period={currentPeriod} onTrySave={onTrySave} onDeleteExpense={onDeleteExpense} onExcludeExpense={onExcludeExpense} allowDelete={currentPeriodIndex === 0} conversionToggled={toggleConversion}/>
+      <SpendPeriod
+        period={currentPeriod}
+        onTrySave={onTrySave}
+        onDeleteExpense={onDeleteExpense}
+        onExcludeExpense={onExcludeExpense}
+        allowDelete={currentPeriodIndex === 0}
+        conversionToggled={toggleConversion}
+        settings={settings}
+      />
     </div>
   );
 
@@ -1832,11 +1916,13 @@ function App() {
             settings={settings}
             onClose={() => onToggleStats(false)}
             toggleConversion={toggleConversion}
+            togglePercent={togglePercent}
             onTrySave={onTrySave}
             onClickOverUnder={onClickedOverUnderInStats}
           />
         </ModalContext>
         : null}
+      <Toggle onToggle={onTogglePercent} icon={'percent'} index={3} isActive={togglePercent}/>
       <Toggle onToggle={onToggleStats} icon={'stats'} index={2} isActive={toggleStats}/>
       <Toggle onToggle={onToggleConversion} icon={'currencyConversion'} index={1} isActive={toggleConversion}/>
     </>
