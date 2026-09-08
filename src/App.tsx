@@ -885,7 +885,7 @@ function Settings({
   initial,
   onChangeSettings
 }: {
-  initial?: Settings
+  initial: Settings
   onChangeSettings: ({}: any) => void
 }) {
   const [currCurrency, setCurrCurrency] = useState<Currency>(initial?.currency ?? DEFAULT_SETTINGS.currency);
@@ -894,13 +894,13 @@ function Settings({
   const onChangeLimitSettings = (currency: Currency, amount: number) => {
     const newLimits = {...limits, [currency]: amount};
     setLimits(newLimits);
-    onChangeSettings({currency: currCurrency, limits: newLimits});
-  }
+    onChangeSettings({...initial, currency: currCurrency, limits: newLimits});
+  };
 
   const onClickCurrencyBadge = (currency: Currency) => {
     setCurrCurrency(currency);
-    onChangeSettings({currency, limits});
-  }
+    onChangeSettings({...initial, currency, limits});
+  };
 
   const CurrencyBadge = ({currency}:{currency: Currency}) => {
     const bgColor = currency === currCurrency ? 'gold' : 'white';
@@ -915,7 +915,7 @@ function Settings({
       height: "48px",
       textAlign: "center",
       fontWeight: "bold",
-    }
+    };
 
     return (
       <div style={style} onClick={() => onClickCurrencyBadge(currency)}>
