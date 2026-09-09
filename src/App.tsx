@@ -4,7 +4,7 @@ import moment from "moment";
 
 type CSS = Partial<CSSProperties>;
   
-type Icon = 'currencyConversion' | 'stats' | 'percent';
+type Icon = 'currencyConversion' | 'stats' | 'percent' | 'tags';
 const ICONS: Record<Icon, JSX.Element> = {
   currencyConversion:
     <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="#1f1f1f" viewBox="0 -960 960 960">
@@ -17,8 +17,16 @@ const ICONS: Record<Icon, JSX.Element> = {
   percent:
     <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="#1f1f1f" viewBox="0 -960 960 960">
       <path d="M300-520q-58 0-99-41t-41-99 41-99 99-41 99 41 41 99-41 99-99 41m0-80q25 0 42.5-17.5T360-660t-17.5-42.5T300-720t-42.5 17.5T240-660t17.5 42.5T300-600m360 440q-58 0-99-41t-41-99 41-99 99-41 99 41 41 99-41 99-99 41m42.5-97.5Q720-275 720-300t-17.5-42.5T660-360t-42.5 17.5T600-300t17.5 42.5T660-240t42.5-17.5M216-160l-56-56 584-584 56 56z"/>
+    </svg>,
+  tags:
+    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="#1f1f1f" viewBox="0 -960 960 960">
+      <path d="M856-390 570-104q-12 12-27 18t-30 6-30-6-27-18L103-457q-11-11-17-25.5T80-513v-287q0-33 23.5-56.5T160-880h287q16 0 31 6.5t26 17.5l352 353q12 12 17.5 27t5.5 30-5.5 29.5T856-390M513-160l286-286-353-354H160v286zM260-640q25 0 42.5-17.5T320-700t-17.5-42.5T260-760t-42.5 17.5T200-700t17.5 42.5T260-640m220 160"/>
     </svg>
 };
+
+const ACTIVE_COLOR_MODAL = "rgba(45,125,210,0.95)";
+const ACTIVE_COLOR_PURE_TOGGLE = "rgba(255,215,0,0.95)" ;
+const INACTIVE_COLOR = "rgba(230,230,230,0.95)";
 
 const WARN_THRESHOLD = 0.80;
 const TAG_NAME_FLASH = 2000;
@@ -206,7 +214,10 @@ const PageIndexStatPageMap: Record<number, StatPage> = {
   0: 'compact',
   1: 'range',
   2: 'rangeUSD',
-  3: 'tagView',
+};
+
+const PageIndexTagPageMap: Record<number, Extract<StatPage, 'tagView'>> = {
+  0: 'tagView'
 };
 
 // @ts-ignore
@@ -744,6 +755,7 @@ function Stats({
   onClickOverUnder,
   toggleConversion,
   togglePercent,
+  isTagModal,
 }: {
   periods: SpendPeriod[];
   settings: Settings;
@@ -752,20 +764,22 @@ function Stats({
   onClickOverUnder: (period: SpendPeriod) => void;
   toggleConversion: boolean;
   togglePercent: boolean;
+  isTagModal: boolean;
 }) {
   // @ts-ignore
-  const [page, setPage] = useState<StatPage>('compact');
+  const [page, setPage] = useState<StatPage>(isTagModal ? 'tagView' : 'compact');
   const [pageIndex, setPageIndex] = useState(0);
+  const [pageMap] = useState(isTagModal ? PageIndexTagPageMap : PageIndexStatPageMap);
   const [consecutiveOnly, setConsecutiveOnly] = useState(true);
   const [showDates, setShowDates] = useState(false);
 
-  const maxLength = Object.entries(PageIndexStatPageMap).length;
+  const maxLength = Object.entries(pageMap).length;
 
   const onBack = (e: any) => {
     let newIdx = pageIndex - 1;
     newIdx = newIdx < 0 ? 0 : newIdx;
     setPageIndex(newIdx);
-    setPage(PageIndexStatPageMap[newIdx]);
+    setPage(pageMap[newIdx]);
     e.stopPropagation();
   };
 
@@ -773,7 +787,7 @@ function Stats({
     let newIdx = pageIndex + 1;
     newIdx = newIdx >= maxLength ? maxLength - 1 : newIdx;
     setPageIndex(newIdx);
-    setPage(PageIndexStatPageMap[newIdx]);
+    setPage(pageMap[newIdx]);
     e.stopPropagation();
   };
 
@@ -812,7 +826,7 @@ function Stats({
   } else if (page === 'rangeUSD') {
     const periodsInUSD = usdAll(periods);
     statDisplay = <RangeStat key={'rangeUSD'} periods={periodsInUSD} currency={'USD'} toggleConversion={toggleConversion} containerStyle={statsDisplayStyle} togglePercent={togglePercent} showDate={showDates}/>;
-  } else if (page === 'tagView' ) {
+  } else if (page === 'tagView') {
     const expenses = consecutiveOnly ?
       getExpensesFromPeriods(getConsecutiveCurrencyPeriods(periods, settings.currency))
       : getExpensesFromPeriods(periods);
@@ -1027,7 +1041,7 @@ function Tag({
   return (
     <div style={tagContainerStyle}>
       <div style={tagStyle} onClick={onClickTagLocal}/>
-      {showName ? <div style={tagNameStyle}>{name}</div> : null}
+      {showName ? <div style={tagNameStyle} onClick={onClickTagLocal}>{name}</div> : null}
     </div>
   );
 }
@@ -1351,17 +1365,22 @@ function Toggle({
   label,
   icon,
   index,
-  isActive
+  isActive,
+  activeColor,
 }:{
-  onToggle: () => void,
-  label?: string,
-  icon?: Icon,
-  index: number,
-  isActive: boolean
+  onToggle: () => void;
+  label?: string;
+  icon?: Icon;
+  index: number;
+  isActive: boolean;
+  activeColor?: string;
 }){
   let fallback = '-';
   const fromBottom = index == 1 ? 24 : ((24 * index) + (40 * (index - 1)));
-  const background = isActive ? "rgba(255,215,0,0.95)" : "rgba(230,230,230,0.95)";
+  const background = isActive ?
+    activeColor ?? ACTIVE_COLOR_PURE_TOGGLE
+    :
+    INACTIVE_COLOR;
   const textColor = isActive ? "#333" : undefined;
 
   const toggleStyle: CSS = {
@@ -1449,6 +1468,7 @@ function App() {
   const [toggleConversion, setToggleConversion] = useState(false);
   const [toggleStats, setToggleStats] = useState(false);
   const [togglePercent, setTogglePercent] = useState(false);
+  const [toggleTagModal, setToggleTagModal] = useState(false);
 
   /* serialization functions */
 
@@ -1670,11 +1690,28 @@ function App() {
   };
 
   const onToggleStats = (val: boolean | null = null) => {
+    if (toggleTagModal) {
+      setToggleTagModal(false);
+    }
+
     if (val === true || val === false) {
       setToggleStats(val);
     } else {
       const newVal = !toggleStats;
       setToggleStats(newVal);
+    }
+  };
+
+  const onToggleTagModal = (val: boolean | null = null) => {
+    if (toggleStats) {
+      setToggleStats(false);
+    }
+
+    if (val === true || val === false) {
+      setToggleTagModal(val);
+    } else {
+      const newVal = !toggleTagModal;
+      setToggleTagModal(newVal);
     }
   };
 
@@ -1893,6 +1930,35 @@ function App() {
     </div>
   );
 
+  const Modal = () => (
+    <>
+      {toggleStats || toggleTagModal ?
+        <ModalContext onClickBackground={toggleTagModal ? onToggleTagModal : onToggleStats}>
+          {toggleStats ? <Stats
+            periods={periods}
+            settings={settings}
+            onClose={() => onToggleStats(false)}
+            toggleConversion={toggleConversion}
+            togglePercent={togglePercent}
+            onTrySave={onTrySave}
+            onClickOverUnder={onClickedOverUnderInStats}
+            isTagModal={false}
+          /> : null}
+          {toggleTagModal ? <Stats
+            periods={periods}
+            settings={settings}
+            onClose={() => onToggleTagModal(false)}
+            toggleConversion={toggleConversion}
+            togglePercent={togglePercent}
+            onTrySave={onTrySave}
+            onClickOverUnder={onClickedOverUnderInStats}
+            isTagModal={true}
+          /> : null}
+        </ModalContext>
+        : null}
+    </>
+  );
+
   const onActivePeriod = currentPeriodIndex == 0;
 
   const newPeriodStyle: CSS = {
@@ -1915,21 +1981,10 @@ function App() {
         {onActivePeriod ? <Settings initial={settings} onChangeSettings={onChangeSettings}/> : null}
         <DataButtons/>
       </div>
-      {toggleStats ?
-        <ModalContext onClickBackground={onToggleStats}>
-          <Stats
-            periods={periods}
-            settings={settings}
-            onClose={() => onToggleStats(false)}
-            toggleConversion={toggleConversion}
-            togglePercent={togglePercent}
-            onTrySave={onTrySave}
-            onClickOverUnder={onClickedOverUnderInStats}
-          />
-        </ModalContext>
-        : null}
-      <Toggle onToggle={onTogglePercent} icon={'percent'} index={3} isActive={togglePercent}/>
-      <Toggle onToggle={onToggleStats} icon={'stats'} index={2} isActive={toggleStats}/>
+      <Modal/>
+      <Toggle onToggle={onToggleTagModal} icon={'tags'} index={4} isActive={toggleTagModal} activeColor={ACTIVE_COLOR_MODAL}/>
+      <Toggle onToggle={onToggleStats} icon={'stats'} index={3} isActive={toggleStats} activeColor={ACTIVE_COLOR_MODAL}/>
+      <Toggle onToggle={onTogglePercent} icon={'percent'} index={2} isActive={togglePercent}/>
       <Toggle onToggle={onToggleConversion} icon={'currencyConversion'} index={1} isActive={toggleConversion}/>
     </>
   )
