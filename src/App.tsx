@@ -203,6 +203,17 @@ function getConsecutiveCurrencyPeriods(periods: SpendPeriod[], currency: Currenc
   return newPeriods;
 }
 
+function getPeriodExcludedTotal(period: SpendPeriod): number {
+  let total = 0;
+  period.expenses.forEach((e) => {
+    if (!e.excluded) {
+      total += e.amount;
+    }
+  });
+
+  return total;
+}
+
 type StatPage = 'compact' | 'range' | 'rangeUSD' | 'tagView';
 const StatPageTitleMap: Record<StatPage, string> = {
   'compact': 'overunders at a glance',
@@ -353,15 +364,17 @@ function CompactOverUnder({
   togglePercent,
   showDate,
   onClickOverUnder,
+  hasExcludedTotal,
 }: {
   period: SpendPeriod;
   toggleConversion: boolean;
   togglePercent: boolean;
   showDate: boolean;
   onClickOverUnder?: (period: SpendPeriod) => void;
+  hasExcludedTotal?: boolean;
 }){
-  let limit = toggleConversion ? usd(period.limit, period.currency) : period.limit;
-  let total = toggleConversion ? usd(period.total, period.currency) : period.total;
+  let limit: number | string = toggleConversion ? usd(period.limit, period.currency) : period.limit;
+  let total: number | string = toggleConversion ? usd(period.total, period.currency) : period.total;
   let currency: Currency = toggleConversion ? 'USD' : period.currency;
   let text = total > limit ? 'over' : 'under';
   text = total === limit ? 'at' : text;
@@ -419,16 +432,31 @@ function CompactOverUnder({
     cursor: onClickOverUnder ? 'pointer' : undefined
   };
 
-  let totalPercent;
+  let totalPercent: string | undefined;
   if (togglePercent) {
     totalPercent = percent(total, limit);
+  }
+
+  if (!Number.isInteger(total)){
+    total = total.toFixed(2);
+  }
+
+  if (!Number.isInteger(limit)){
+    limit = limit.toFixed(2);
+  }
+
+  const TotalLine = () => {
+    if (hasExcludedTotal) {
+      return <span style={totalStyle}>({totalPercent ?? total})</span>;
+    }
+    return <span style={totalStyle}>{totalPercent ?? total}</span>;
   }
 
   return (
     <div style={containerStyle} key={period.start} onClick={localOnClickOverUnder}>
       {showDate ? <div style={dateStyle}>{date}</div> : null}
       <span style={currencyStyle}>{currency}</span>
-      <span style={totalStyle}>{totalPercent ?? total}</span>
+      <TotalLine/>
       <span style={overunderStyle}>&nbsp;{text}&nbsp;</span>
       <span style={currencyStyle}>{currency}</span>
       <span style={priceFont}>{togglePercent ? ONE_HUNDRED_PERCENT : limit}</span>
@@ -633,6 +661,7 @@ function RangeStat({
   toggleConversion,
   togglePercent,
   showDate,
+  showExcludedTotal,
   containerStyle,
 }: {
   periods: SpendPeriod[];
@@ -640,6 +669,7 @@ function RangeStat({
   toggleConversion: boolean;
   togglePercent: boolean;
   showDate: boolean;
+  showExcludedTotal: boolean;
   containerStyle?: CSS;
 }) {
   const [from, setFrom] = useState(
@@ -657,7 +687,7 @@ function RangeStat({
     e.stopPropagation();
   };
 
-  const periodsInRange = periods.filter((p) => {
+  let periodsInRange = periods.filter((p) => {
     const toM = moment(to);
     const fromM = moment(from);
     if (p.end) {
@@ -666,15 +696,27 @@ function RangeStat({
     return moment(p.start).isSameOrAfter(fromM) && moment().isSameOrBefore(toM);
   });
 
+  let periodsInRangeFullTotalParallel = periodsInRange;
+  let periodsForStats = toggleConversion ? usdAll(periodsInRange) : periodsInRange;
+  if (showExcludedTotal) {
+    periodsInRange = periodsInRange.map((period) => {
+      return {...period, total: getPeriodExcludedTotal(period)}
+    });
+  }
+
   let totalOfPeriods: number | null = null;
   let periodsIncluded = 0;
   let lowestPeriodValue: number | null = Number.MAX_SAFE_INTEGER;
   let lowestPeriod: SpendPeriod | null =  null;
   let highestPeriodValue: number | null = Number.MIN_SAFE_INTEGER;
   let highestPeriod: SpendPeriod | null = null;
-  if (periodsInRange.length > 0) {
+  let highestPeriodByPercentValue: number | null = Number.MIN_SAFE_INTEGER;
+  let highestPeriodByPercent: SpendPeriod | null = null;
+  let lowestPeriodByPercentValue: number | null = Number.MAX_SAFE_INTEGER;
+  let lowestPeriodByPercent: SpendPeriod | null = null;
+  if (periodsForStats.length > 0) {
     totalOfPeriods = 0;
-    periodsInRange.forEach((p) => {
+    periodsForStats.forEach((p) => {
       if (p.currency === currency) {
         totalOfPeriods! += p.total;
         periodsIncluded++;
@@ -682,11 +724,19 @@ function RangeStat({
         if (p.total > highestPeriodValue!) {
           highestPeriodValue = p.total;
           highestPeriod = p;
-        }
-
-        if (p.total < lowestPeriodValue!) {
+        } else if (p.total < lowestPeriodValue!) {
           lowestPeriodValue = p.total;
           lowestPeriod = p;
+        }
+
+        // Percent stats
+        const percent = p.total / p.limit;
+        if (percent > highestPeriodByPercentValue!) {
+          highestPeriodByPercentValue = percent;
+          highestPeriodByPercent = p;
+        } else if (percent < lowestPeriodByPercentValue!) {
+          lowestPeriodByPercentValue = percent;
+          lowestPeriodByPercent = p;
         }
       }
     });
@@ -721,9 +771,16 @@ function RangeStat({
       <StatValue label={`average of ${periodsIncluded} ${currency}  periods: `} value={averageOfPeriods} noValueMessage={`cannot calculate average`}/>
       <StatValue label={`highest spend: `} value={highestPeriod ? <CompactOverUnder period={highestPeriod} toggleConversion={toggleConversion} togglePercent={togglePercent} showDate={showDate}/> : null} noValueMessage={`cannot calculate highest spend`}/>
       <StatValue label={`lowest spend: `} value={lowestPeriod ? <CompactOverUnder period={lowestPeriod} toggleConversion={toggleConversion} togglePercent={togglePercent} showDate={showDate}/> : null} noValueMessage={`cannot calculate lowest spend`}/>
+      <StatValue label={`highest spend %: `} value={highestPeriodByPercent ? <CompactOverUnder period={highestPeriodByPercent} toggleConversion={toggleConversion} togglePercent={true} showDate={showDate}/> : null} noValueMessage={`cannot calculate highest spend %`}/>
+      <StatValue label={`lowest spend %: `} value={lowestPeriodByPercent ? <CompactOverUnder period={lowestPeriodByPercent} toggleConversion={toggleConversion} togglePercent={true} showDate={showDate}/> : null} noValueMessage={`cannot calculate lowest spend %`}/>
       <hr/>
       {periodsInRange.length > 0 ?
-        periodsInRange.map((p) => <CompactOverUnder key={p.start} period={p} toggleConversion={toggleConversion} togglePercent={togglePercent} showDate={showDate}/>)
+        periodsInRange.map((p, i) => {
+          if (showExcludedTotal && periodsInRangeFullTotalParallel[i].total !== p.total) {
+            return <CompactOverUnder key={`rsx${p.start}`} period={p} toggleConversion={toggleConversion} togglePercent={togglePercent} showDate={showDate} hasExcludedTotal={true}/>;
+          }
+          return <CompactOverUnder key={`rs${p.start}`} period={p} toggleConversion={toggleConversion} togglePercent={togglePercent} showDate={showDate}/>;
+        })
         :
         <div>no spend periods in range</div>
       }
@@ -771,6 +828,7 @@ function Stats({
   const [pageIndex, setPageIndex] = useState(0);
   const [pageMap] = useState(isTagModal ? PageIndexTagPageMap : PageIndexStatPageMap);
   const [consecutiveOnly, setConsecutiveOnly] = useState(true);
+  const [showExcludedTotal, setShowExcludedTotal] = useState(false);
   const [showDates, setShowDates] = useState(false);
 
   const maxLength = Object.entries(pageMap).length;
@@ -799,6 +857,10 @@ function Stats({
     setShowDates(!showDates);
   };
 
+  const onShowExcludedTotal = () => {
+    setShowExcludedTotal(!showExcludedTotal);
+  };
+
   const statsDisplayStyle: CSS = {
     maxHeight: "400px",
     overflowY: "scroll",
@@ -806,11 +868,22 @@ function Stats({
 
   let statDisplay;
   let periodsToUse = consecutiveOnly ? getConsecutiveCurrencyPeriods(periods, settings.currency) : periods;
+
   if (page === 'compact') {
+    let periodsInRangeFullTotalParallel = periodsToUse;
+    if (showExcludedTotal) {
+      periodsToUse = periodsToUse.map((period) => {
+        return {...period, total: getPeriodExcludedTotal(period)}
+      });
+    }
+
     statDisplay = (
       <div style={statsDisplayStyle}>
-        {periodsToUse.map((p) =>
-          <CompactOverUnder
+        {periodsToUse.map((p, i) => {
+          if (showExcludedTotal && periodsInRangeFullTotalParallel[i].total !== p.total) {
+            return <CompactOverUnder key={`couexc${p.start}`} period={p} toggleConversion={toggleConversion} togglePercent={togglePercent} showDate={showDates} hasExcludedTotal={true}/>;
+          }
+          return <CompactOverUnder
             key={`cou${p.start}`}
             period={p}
             toggleConversion={toggleConversion}
@@ -818,14 +891,31 @@ function Stats({
             onClickOverUnder={onClickOverUnder}
             togglePercent={togglePercent}
           />
-        )}
+        })}
       </div>
     );
   } else if (page === 'range') {
-    statDisplay = <RangeStat key={'range'} periods={periodsToUse} currency={settings.currency} toggleConversion={toggleConversion} containerStyle={statsDisplayStyle} togglePercent={togglePercent} showDate={showDates}/>;
+    statDisplay = <RangeStat
+      key={'range'}
+      periods={periodsToUse}
+      currency={settings.currency}
+      toggleConversion={toggleConversion}
+      containerStyle={statsDisplayStyle}
+      togglePercent={togglePercent}
+      showDate={showDates}
+      showExcludedTotal={showExcludedTotal}
+    />;
   } else if (page === 'rangeUSD') {
-    const periodsInUSD = usdAll(periods);
-    statDisplay = <RangeStat key={'rangeUSD'} periods={periodsInUSD} currency={'USD'} toggleConversion={toggleConversion} containerStyle={statsDisplayStyle} togglePercent={togglePercent} showDate={showDates}/>;
+    statDisplay = <RangeStat
+      key={'rangeUSD'}
+      periods={periodsToUse}
+      currency={'USD'}
+      toggleConversion={true}
+      containerStyle={statsDisplayStyle}
+      togglePercent={togglePercent}
+      showDate={showDates}
+      showExcludedTotal={showExcludedTotal}
+    />;
   } else if (page === 'tagView') {
     const expenses = consecutiveOnly ?
       getExpensesFromPeriods(getConsecutiveCurrencyPeriods(periods, settings.currency))
@@ -865,6 +955,40 @@ function Stats({
   const checkboxStyle: CSS = {
     fontSize: "11px",
   };
+
+  const statOptionsContStyle: CSS = {
+    display: "flex",
+    alignSelf: "center",
+    overflowX: "scroll",
+    width: "90%",
+    whiteSpace: "nowrap",
+  };
+
+  const StatOptions = () => (
+    <div style={statOptionsContStyle}>
+      {page !== 'rangeUSD' ?
+        <div style={checkboxStyle}>
+          <label>
+            <input type="checkbox" onChange={onConsecutiveOnly} checked={consecutiveOnly}/>
+            same-currency period group
+          </label>
+        </div> : null}
+      {page !== 'tagView' ?
+        <div style={checkboxStyle}>
+          <label>
+            <input type="checkbox" onChange={onShowDates} checked={showDates}/>
+            dates
+          </label>
+        </div> : null}
+      {page !== 'tagView' ?
+        <div style={checkboxStyle}>
+          <label>
+            <input type="checkbox" onChange={onShowExcludedTotal} checked={showExcludedTotal}/>
+            excluded totals
+          </label>
+        </div> : null}
+    </div>
+  );
   
   return (
     <div style={styleStatsContainer}>
@@ -876,20 +1000,7 @@ function Stats({
           <button onClick={onClose}>Close</button>&nbsp;
           <button onClick={onNext} disabled={pageIndex === maxLength - 1}>{'>'}</button>
         </div>
-        {page !== 'rangeUSD' ?
-          <div style={checkboxStyle}>
-            <label>
-              <input type="checkbox" onChange={onConsecutiveOnly} checked={consecutiveOnly}/>
-              same-currency period group
-            </label>
-          </div> : null}
-        {page !== 'tagView' ?
-        <div style={checkboxStyle}>
-          <label>
-            <input type="checkbox" onChange={onShowDates} checked={showDates}/>
-            show dates
-          </label>
-        </div> : null}
+        <StatOptions/>
       </div>
     </div>
   );
@@ -1041,7 +1152,7 @@ function Tag({
   return (
     <div style={tagContainerStyle}>
       <div style={tagStyle} onClick={onClickTagLocal}/>
-      {showName ? <div style={tagNameStyle} onClick={onClickTagLocal}>{name}</div> : null}
+      {showName ? <div style={tagNameStyle}>{name}</div> : null}
     </div>
   );
 }
@@ -1862,13 +1973,26 @@ function App() {
       displayAllExpensesPercent = percent(allExpensesSpent, limit);
     }
 
+    let displaySpentText = displaySpent.toString();
+    if (!Number.isInteger(displaySpent)) {
+      displaySpentText = displaySpent.toFixed(2);
+    }
+
+    let displayAllExpensesSpentText;
+    if (showAllExpensesSpent) {
+      displayAllExpensesSpentText = allExpensesSpent;
+      if (!Number.isInteger(allExpensesSpent)) {
+        displayAllExpensesSpentText = allExpensesSpent.toFixed(2);
+      }
+    }
+
     return (
       <div style={contStyle}>
         <h5 style={spentStyle}>{spentText}</h5>
         <div>
-          <span>{currencyDisplay}</span><span style={spentNumberStyle}>{displayPercent ?? displaySpent}</span>
+          <span>{currencyDisplay}</span><span style={spentNumberStyle}>{displayPercent ?? displaySpentText}</span>
         </div>
-        {showAllExpensesSpent ? <div style={allExpensesSpentContStyle}>(<span style={allExpensesSpentCurrencyStyle}>{currencyDisplay}</span><span style={allExpensesSpentNumberStyle}>{displayAllExpensesPercent ?? allExpensesSpent}</span>)</div> : null}
+        {showAllExpensesSpent ? <div style={allExpensesSpentContStyle}>(<span style={allExpensesSpentCurrencyStyle}>{currencyDisplay}</span><span style={allExpensesSpentNumberStyle}>{displayAllExpensesPercent ?? displayAllExpensesSpentText}</span>)</div> : null}
         <h6 style={overunderStyle}>{overunderText}</h6>
         <div>
           <span>{currencyDisplay}</span><span style={limitNumberStyle}>{togglePercent ? ONE_HUNDRED_PERCENT : limit}</span>
