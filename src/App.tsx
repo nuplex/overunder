@@ -734,7 +734,9 @@ function RangeStat({
         if (percent > highestPeriodByPercentValue!) {
           highestPeriodByPercentValue = percent;
           highestPeriodByPercent = p;
-        } else if (percent < lowestPeriodByPercentValue!) {
+        }
+
+        if (percent < lowestPeriodByPercentValue!) {
           lowestPeriodByPercentValue = percent;
           lowestPeriodByPercent = p;
         }
